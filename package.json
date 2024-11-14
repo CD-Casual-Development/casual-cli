@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "NODE_ENV=production bun run ./index.ts",
-    "dev": "NODE_ENV=development bun run --watch ./index.ts"
+    "dev": "NODE_ENV=development bun run --watch ./index.ts",
+    "install:chromium": "npx @puppeteer/browsers install chromium"
   },
   "devDependencies": {
     "@types/bun": "latest"
