@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\nINSERT INTO invoices (\n    sender_id,\n    recipient_id,\n    invoice_number,\n    quote_id,\n    payment_due_date,\n    payment_date,\n    contract_id,\n    project_id,\n    remarks,\n    total_before_vat,\n    discount,\n    vat_percentage,\n    currency,\n    total_after_vat,\n    invoice_url,\n    payment_request_url\n) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 16
+    },
+    "nullable": []
+  },
+  "hash": "bdb99f1e82ea3e82b1dade11124ae6672cc71e7635392e79d98c6c266ecb7c83"
+}

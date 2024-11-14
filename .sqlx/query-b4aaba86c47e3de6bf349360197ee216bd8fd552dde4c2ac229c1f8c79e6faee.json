@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM invoices WHERE contract_id = ? ORDER BY id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "sender_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "recipient_id",
+        "ordinal": 2,
+        "type_info": "Int64"
+      },
+      {
+        "name": "invoice_number",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "quote_id",
+        "ordinal": 4,
+        "type_info": "Int64"
+      },
+      {
+        "name": "send_date",
+        "ordinal": 5,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "payment_due_date",
+        "ordinal": 6,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "payment_date",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "contract_id",
+        "ordinal": 8,
+        "type_info": "Int64"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "remarks",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_before_vat",
+        "ordinal": 11,
+        "type_info": "Int64"
+      },
+      {
+        "name": "discount",
+        "ordinal": 12,
+        "type_info": "Int64"
+      },
+      {
+        "name": "vat_percentage",
+        "ordinal": 13,
+        "type_info": "Int64"
+      },
+      {
+        "name": "currency",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_after_vat",
+        "ordinal": 15,
+        "type_info": "Int64"
+      },
+      {
+        "name": "invoice_url",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "payment_request_url",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 18,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 19,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b4aaba86c47e3de6bf349360197ee216bd8fd552dde4c2ac229c1f8c79e6faee"
+}

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title></title>
+</head>
+
+<body>
+  <div class="row address">
+    <div class="col col-2">
+      <h2>%%sender_name%%</h2>
+      <span>%%sender_street%%</span>
+      <span>%%sender_postal_city%%</span>
+      <span>%%sender_phone%%</span>
+      <span>KVKnr. %%sender_commerce_number%%</span>
+      <span>BTWnr. %%sender_vat_number%%</span>
+    </div>
+    <div class="col col-1">
+      <h3>Factuur voor</h3>
+      <span>%%recipient_name%%</span>
+      <span>%%recipient_company_name%%</span>
+      <span>%%recipient_street%%</span>
+      <span>%%recipient_postal_city%%</span>
+    </div>
+  </div>
+  <h1>Factuur</h1>
+  <b>Verzonden op %%send_date%%</b>
+  <br />
+  <div class="row between">
+    <div class="col">
+      <h3>Verschuldigd aan</h3>
+      <span>%%sender_name%%</span>
+      <br />
+      <br />
+      <h3>Project</h3>
+      <span>%%project_title%%</span>
+    </div>
+    <div class="col">
+      <h3>Factuurnr.</h3>
+      <span>%%invoice_number%%</span>
+      <br />
+      <br />
+      <h3>Uiterste betaaldatum</h3>
+      <span>%%due_date%%</span>
+    </div>
+    <div class="col"></div>
+  </div>
+  <div class="divider"></div>
+  <inject-table items="project_tasks" class="tasks-table">
+    <inject-column prop="description" class="black" label="Beschrijving" />
+    <inject-column prop="hours_spent" class="align-right" label="Aantal uur" />
+    <inject-column prop="hourly_rate" class="align-right" label="Uurprijs" />
+    <inject-column prop="total" class="align-right" label="Totaalbedrag" />
+  </inject-table>
+  <hr />
+  <div class="row">
+    <div class="col col-5">
+      <p class="gray"><span class="light-gray">Opmerkingen: </span>%%remarks%%</p>
+    </div>
+    <div class="col col-2 align-right span-mb-12">
+      <span class="blue">Totaal (excl. BTW):</span>
+      <span class="blue">Aanpassingen:</span>
+      <span class="blue">%%vat_percentage%%&percnt; BTW:</span>
+      <span class="bold blue">Totaal (incl. BTW):</span>
+    </div>
+    <div class="col col-2 span-mb-12">
+      <span class="currency bold gray">%%total_before_vat%%</span>
+      <span class="align-right bold gray">- <span class="currency">%%discount%%</span></span>
+      <span class="currency bold gray mb-4">%%vat_amount%%</span>
+      <span class="currency large bold gray">%%total_after_vat%%</span>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title></title>
+    </head>
+
+    <body>
+       <h1>Quote</h1>
+       <p>%%sender_name%%</p>
+       <p>%%sender_address%%</p>
+       <p>%%sender_phone%%</p>
+       <p>%%sender_email%%</p>
+       <p>%%sender_commerce_number%%</p>
+       <p>%%recipient_name%%</p>
+       <p>%%recipient_address%%</p>
+       <p>%%recipient_phone%%</p>
+       <p>%%recipient_email%%</p>
+       <p>%%project_title%%</p>
+       <p>%%project_description%%</p>
+       <p>%%project_duration%%</p>
+       <inject-table items="project_tasks">
+          <inject-column prop="title" label="Titel" />
+          <inject-column prop="description" label="Omschrijving" />
+          <inject-column prop="hours_estimated" label="Uren" />
+          <inject-column prop="hourly_rate" label="Uurtarief" />
+          <inject-column prop="total" label="Totaal" />
+       </inject-table>
+       <p>%%remarks%%</p>
+       <p>%%currency_symbol%%</p>
+       <p>%%total_before_vat%%</p>
+       <p>%%discount%%</p>
+       <p>%%vat_percentage%%</p>
+       <p>%%total_after_vat%%</p>
+    </body>
+</html>

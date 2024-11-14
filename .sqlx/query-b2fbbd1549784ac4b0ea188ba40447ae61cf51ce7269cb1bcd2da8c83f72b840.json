@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\nINSERT INTO companies (\n    name,\n    logo,\n    commerce_number,\n    vat_number,\n    iban,\n    address_id\n) VALUES (?, ?, ?, ?, ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "b2fbbd1549784ac4b0ea188ba40447ae61cf51ce7269cb1bcd2da8c83f72b840"
+}

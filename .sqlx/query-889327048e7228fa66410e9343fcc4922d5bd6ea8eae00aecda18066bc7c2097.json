@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM address WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "country",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "city",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "street",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "number",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "unit",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "postalcode",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 8,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "889327048e7228fa66410e9343fcc4922d5bd6ea8eae00aecda18066bc7c2097"
+}

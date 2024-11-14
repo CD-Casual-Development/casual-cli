@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT * FROM tasks WHERE project_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "minutes_estimated",
+        "ordinal": 4,
+        "type_info": "Int64"
+      },
+      {
+        "name": "minutes_spent",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "minutes_remaining",
+        "ordinal": 6,
+        "type_info": "Int64"
+      },
+      {
+        "name": "minutes_billed",
+        "ordinal": 7,
+        "type_info": "Int64"
+      },
+      {
+        "name": "is_completed",
+        "ordinal": 8,
+        "type_info": "Bool"
+      },
+      {
+        "name": "minute_rate",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "start_date",
+        "ordinal": 10,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "end_date",
+        "ordinal": 11,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 12,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 13,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9437caa8b6dcaccda17a43cf1b4868dd8c029ddf6e0463fe6a46fec09aa108a2"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\nINSERT INTO address (\n    country,\n    city,\n    street,\n    number,\n    unit,\n    postalcode\n) VALUES (?, ?, ?, ?, ?, ?)\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "92a71e66f14c0b9c4a78659333330377bdb437a0135cf6c322adfc04aeb38bed"
+}
