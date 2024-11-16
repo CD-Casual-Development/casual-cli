@@ -6,6 +6,7 @@ const Program = [
   'schedule',
   'finance'
 ] as const;
+type Program = typeof Program[number];
 
 const PrintMode = [
   'normal',
@@ -13,6 +14,7 @@ const PrintMode = [
   'value',
   'json'
 ] as const;
+type PrintMode = typeof PrintMode[number];
 
 function pretty(json: object): string {
   return decodeURIComponent(JSON.stringify(json, undefined, 4).replaceAll('\n', '<br/>').replaceAll(' ', '&nbsp;'));
@@ -20,7 +22,7 @@ function pretty(json: object): string {
 
 const isProd = Bun.env.NODE_ENV === "production";
 
-async function cli(program: typeof Program[number], command: string | number, args?: [string, string | number][] | number, print_mode: typeof PrintMode[number] = 'html'): Promise<string | Record<string, any> | any[] | void> {
+async function cli(program: Program, command: string | number, args?: [string, string | number][] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
   let argsString: '' | number | { raw: string; } = '';
 
@@ -31,8 +33,6 @@ async function cli(program: typeof Program[number], command: string | number, ar
       raw: args.map(([param, value]) => {
         if (param.startsWith('-') && value) {
           return `${param} ${value}`;
-        } else if (param && !value) {
-          return `${param}`;
         } else {
           return false;
         }
