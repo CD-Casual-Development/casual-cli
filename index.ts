@@ -106,13 +106,26 @@ const htmlTail = `    </main>
 
 </html>`;
 
-const Program = [
-  'account',
-  'project',
-  'schedule',
-  'finance'
-] as const;
-type Program = typeof Program[number];
+const CLI = {
+  account: [
+    'list', 'ls', 'list-companies',
+    'add', 'add-company',
+    'get', 'get-company',
+    'remove', 'remove-company'
+  ],
+  project: [
+    'list', 'ls', 'list-tasks', 'list-quotes', 'list-invoices',
+    'add', 'add-task',
+    'get', 'get-task', 'complete-task',
+    'get-quote', 'get-invoice',
+    'make-quote', 'make-invoice',
+    'remove', 'remove-task'
+  ],
+  schedule: ['list', 'ls', 'get', 'add', 'remove'],
+  finance: ['report', 'add-query', 'remove']
+} as const;
+type Program = keyof typeof CLI;
+type Command<T extends Program> = typeof CLI[T][number];
 
 const PrintMode = [
   'normal',
@@ -128,7 +141,7 @@ function pretty(json: object): string {
 
 const isProd = Bun.env.NODE_ENV === "production";
 
-async function cli(program: Program, command: string | number, args?: [string, string | number][] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
+async function cli<T extends Program>(program: T, command: Command<T>, args?: [string, string | number][] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
   let argsString: '' | number | { raw: string; } = '';
 
@@ -166,22 +179,23 @@ async function cli(program: Program, command: string | number, args?: [string, s
         return decodeURIComponent(cmd.stdout.toString());
       }
     }
-    console.warn('BunShell return nothing');
+    console.warn('BunShell returned nothing');
   } catch (err) {
     console.error('Cli error:', err);
     return 'Server error';
   }
 }
 
-function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[]>) {
+function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[] | [string | number, string][]>) {
   return `${title(id.replaceAll('-', ' '), 2)}<label for="result">Result:</label><span id="result"></span>
 <form id="${id}" hx-post="${postPath}" hx-swap="innerHTML" hx-target="#result">
   ${fieldsNames.map(name => {
     let html = `<input placeholder="${name}" name="${name}" />`;
 
+
     if (autoComplete && autoComplete[name]) {
       html = `<input placeholder="${name}" name="${name}" list="datalist-${name}" />`;
-      html += `<datalist id="datalist-${name}">${autoComplete[name].map((val) => `<option>${val}</option>`).join('')}</datalist>`;
+      html += `<datalist id="datalist-${name}">${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}">${val[1]}</option>` : `<option>${val}</option>`).join('')}</datalist>`;
     }
 
     return html;
@@ -220,6 +234,18 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     if (el.querySelector('.view-button')) {
       return;
     }
+
+    ${targetId === 'quote-view' ? `
+      const invoiceBtn = document.createElement('button');
+      invoiceBtn.setAttribute('class', 'invoice-button');
+      invoiceBtn.setAttribute('hx-get', \`/make-invoice/\${el.dataset.id}\`);
+      invoiceBtn.innerText = 'Make invoice';
+      if (typeof window.htmx !== 'undefined') {
+        htmx.process(invoiceBtn);
+      }
+      el.appendChild(invoiceBtn);
+    ` : ''}
+
     const btn = document.createElement('button');
     btn.setAttribute('class', 'view-button')
     btn.setAttribute('hx-get', \`/${name}/\${el.dataset.id}\`);
@@ -256,6 +282,7 @@ async function parseBody(stream: ReadableStream) {
 }
 
 Bun.serve({
+  /* ts-ignore */
   idleTimeout: 255,
 
   async fetch(req, _server) {
@@ -304,11 +331,32 @@ Bun.serve({
 
               const accounts = await cli('account', 'ls');
               const companies = await cli('account', 'list-companies');
+
+              const accountJson = await cli('account', 'ls', undefined, 'json');
+              let account_id: [string | number, string][] = [];
+              if (accountJson && Array.isArray(accountJson)) {
+                account_id = accountJson.map((account) => [account.id, account.name]);
+              }
+
+              const companiesJson = await cli('account', 'list-companies', undefined, 'json');
+              let company_id: [string | number, string][] = [];
+              if (companiesJson && Array.isArray(companiesJson)) {
+                company_id = companiesJson.map((company) => [company.id, company.name]);
+              }
+
+              let address_id: [string | number, string][] = [];
+              if (companiesJson && Array.isArray(companiesJson)) {
+                address_id = companiesJson.map((company) => [company.address_id, company.name]);
+              }
+              if (accountJson && Array.isArray(accountJson)) {
+                address_id.concat(accountJson.map((account) => [account.address_id, account.name]));
+              }
+
               res = page(`
 ${overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found')}
-${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'])}
+${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'], { company_id, address_id })}
 ${overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2)}
-${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'])}`);
+${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id })}`);
             } break outer;
 
             case "/companies": {
@@ -351,10 +399,14 @@ ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimate
               }
 
               const projects = await cli('project', 'ls');
-
+              const clients = await cli('account', 'ls', undefined, 'json');
+              let client_id: [string | number, string][] = [];
+              if (clients && Array.isArray(clients)) {
+                client_id = clients.map((client) => [client.id, client.name]);
+              }
               res = page(`
 ${overview('projects', typeof projects === 'string' ? projects : 'No projects found')}
-${form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id: ['1', '2', '3'] })}`);
+${form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id })}`);
             } break outer;
 
             case '/make-quote': {
@@ -398,6 +450,16 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
               }*/
             } break outer;
 
+            case '/make-invoice': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing quote id');
+                break outer;
+              }
+
+              cli('project', 'make-invoice', [['-q', pathId]], 'normal');
+              res = new Response(`<button hx-get="/projects/${pathId}" hx-swap="innerHTML transition:true" hx-target="#main">Processing...<br/>click to refresh</button>`);
+            } break outer;
+
             case '/quotes': {
               if (!pathId || Number.isNaN(pathId)) {
                 res = new Response('Missing quote id');
@@ -409,7 +471,7 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
                 res = new Response(`${pretty(quote)}`);
               } else {
                 console.log('No quote found', { quote });
-                res = new Response(`Not found, received ${quote}`)
+                res = new Response(`Not found, received ${quote}`);
               }
             } break outer;
 
@@ -579,7 +641,7 @@ ${form('add-schedule', '/schedule', ['date'])}`);
       console.debug({ res });
       return res;
     } catch (err) {
-      return new Response(`Error 500: ${err}`, { status: 500 })
+      return new Response(`Error 500: ${err}`, { status: 500 });
     }
   }
 });
