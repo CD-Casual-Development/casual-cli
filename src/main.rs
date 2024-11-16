@@ -302,7 +302,7 @@ enum AccountCommands {
 enum ProjectCommands {
     Get {
         id: i64,
-        #[arg(short, long, default_value_t=false)]
+        #[arg(short, long, default_value_t = false)]
         client: bool,
     },
     /// Add a project
@@ -532,7 +532,17 @@ async fn main() -> Result<()> {
             Some(ProjectCommands::MakeQuote { args }) => {
                 log.msg(format!("Making quote for project {}", args.project_id));
                 let quote_url = make_quote(&db_pool, args).await?;
-                log.print("Quote made, url:".to_string(), quote_url, true);
+                if &mode == &PrintMode::Json {
+                    log.print("".to_string(), Jchar::from('['), false);
+                }
+                log.print(
+                    "Quote made, url:".to_string(),
+                    quote_url,
+                    &mode != &PrintMode::Json,
+                );
+                if &mode == &PrintMode::Json {
+                    log.print("".to_string(), Jchar::from(']'), false);
+                }
             }
             Some(ProjectCommands::GetInvoice { id }) => {
                 log.msg(format!("Getting invoice with id {}", id));
@@ -584,7 +594,6 @@ async fn main() -> Result<()> {
                         .fetch_all(&db_pool)
                         .await?;
 
-                
                 log_list!(log, mode, tasks);
             }
             Some(ProjectCommands::ListQuotes) => {

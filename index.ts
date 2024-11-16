@@ -20,9 +20,9 @@ function pretty(json: object): string {
 
 const isProd = Bun.env.NODE_ENV === "production";
 
-async function cli(program: typeof Program[number], command: string | number, args?: [string, string | number][] | number, print_mode: typeof PrintMode[number] = 'html'): Promise<string | Record<string, any> | void> {
+async function cli(program: typeof Program[number], command: string | number, args?: [string, string | number][] | number, print_mode: typeof PrintMode[number] = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
-  let argsString: '' | number | { raw: string } = '';
+  let argsString: '' | number | { raw: string; } = '';
 
   if (typeof args === 'number') {
     argsString = args;
@@ -42,22 +42,28 @@ async function cli(program: typeof Program[number], command: string | number, ar
 
   console.debug({ isProd, print_mode, program, command, argsString, args });
   let cmd;
-  if (isProd) {
-    cmd = await $`casual-cli -m ${print_mode} ${program} ${command} ${argsString}`
-  } else {
-    cmd = await $`cargo run --quiet -- -m ${print_mode} ${program} ${command} ${argsString}`
-  }
-
-  if (cmd) {
-    if (cmd.exitCode !== 0) {
-      console.error('cli failed', cmd.stderr.toString());
+  try {
+    if (isProd) {
+      cmd = await $`casual-cli -m ${print_mode} ${program} ${command} ${argsString}`;
     } else {
-      if (print_mode === 'json') {
+      cmd = await $`cargo run --quiet -- -m ${print_mode} ${program} ${command} ${argsString}`;
+    }
+    console.debug({ cmd, data: cmd.stdout.toString() });
+    if (cmd) {
+      if (cmd.exitCode !== 0) {
+        console.error('cli failed', cmd.stderr.toString());
+      } else if (print_mode === 'json') {
         return JSON.parse(cmd.stdout.toString());
+      } else if (print_mode === 'value') {
+        return cmd.stdout.toString();
       } else {
         return decodeURIComponent(cmd.stdout.toString());
       }
     }
+    console.warn('BunShell return nothing');
+  } catch (err) {
+    console.error('Cli error:', err);
+    return 'Server error';
   }
 }
 
@@ -104,10 +110,15 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
 </style>
 <script>
   document.querySelectorAll('.${name} [data-id]').forEach((el) => {
+    if (el.querySelector('.view-button')) {
+      return;
+    }
     const btn = document.createElement('button');
+    btn.setAttribute('class', 'view-button')
     btn.setAttribute('hx-get', \`/${name}/\${el.dataset.id}\`);
     btn.setAttribute('hx-swap', 'innerHTML${targetId === 'main' ? ' transition:true' : ''}');
     btn.setAttribute('hx-target', '#${targetId}');
+    btn.setAttribute('hx-push-url', 'true');
     btn.innerText = 'view';
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
@@ -133,279 +144,314 @@ async function parseBody(stream: ReadableStream) {
       values.set(key, value);
     });
 
-  console.debug({ bodyString, values });
+  // console.debug({ bodyString, values });
   return values;
 }
 
 Bun.serve({
   async fetch(req, _server) {
-    // console.debug(req, server)
-    const url = new URL(req.url);
-    // const origin = url.origin;
-    const pathParts = url.pathname.split('/');
-    const path = `/${pathParts[1]}`;
-    const pathId = parseInt(pathParts[2], 10);
-    // const queryParams = url.searchParams;
-    const method = req.method;
+    try {
+      // console.debug(req, server)
+      const url = new URL(req.url);
+      // const origin = url.origin;
+      const pathParts = url.pathname.split('/');
+      const path = `/${pathParts[1]}`;
+      const pathId = parseInt(pathParts[2], 10);
+      // const queryParams = url.searchParams;
+      const method = req.method;
 
-    let res: Response;
+      let res: Response;
 
-    outer: switch (method) {
-      case "GET": {
-        switch (path) {
+      outer: switch (method) {
+        case "GET": {
 
-          case "/": {
-            res = new Response(Bun.file('./index.html'));
-          } break outer;
+          if (pathParts.includes('.ccli')) {
+            res = new Response(Bun.file(url.pathname));
+            break outer;
+          }
 
-          case "/hello": {
-            res = new Response('Hello World!');
-          } break outer;
+          switch (path) {
 
-          case "/accounts": {
-            if (pathId && !Number.isNaN(pathId)) {
-              const account = await cli('account', 'get', pathId, 'json');
-              console.log({ account });
-              if (account && typeof account === 'object') {
-                res = new Response(`${title(account.name)}${pretty(account)}`)
-                break outer;
-              } else {
-                console.error('project id not found', pathId);
+            case "/": {
+              res = new Response(Bun.file('./index.html'));
+            } break outer;
+
+            case "/hello": {
+              res = new Response('Hello World!');
+            } break outer;
+
+            case "/accounts": {
+              if (pathId && !Number.isNaN(pathId)) {
+                const account = await cli('account', 'get', pathId, 'json');
+
+                if (account && typeof account === 'object' && !Array.isArray(account)) {
+                  res = new Response(`${title(account.name)}${pretty(account)}`);
+                  break outer;
+                } else {
+                  console.error('project id not found', { pathId, account });
+                }
               }
-            }
 
-            const accounts = await cli('account', 'ls');
-            const companies = await cli('account', 'list-companies')
-            res = new Response(`
+              const accounts = await cli('account', 'ls');
+              const companies = await cli('account', 'list-companies');
+              res = new Response(`
 ${overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found')}
 ${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'])}
 ${overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2)}
 ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'])}`);
-          } break outer;
+            } break outer;
 
-          case "/companies": {
-            if (!pathId || Number.isNaN(pathId)) {
-              res = new Response('Missing company id');
-              break outer;
-            }
+            case "/companies": {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing company id');
+                break outer;
+              }
 
-            const company = await cli('account', 'get-company', pathId, 'json');
-            if (company && typeof company === 'object') {
-              res = new Response(`${title(company.name)}${pretty(company)}`);
-            } else {
-              console.log('No task found', { company })
-              res = new Response(`Not found, received ${company}`);
-            }
-          } break outer;
+              const company = await cli('account', 'get-company', pathId, 'json');
+              if (company && typeof company === 'object' && !Array.isArray(company)) {
+                res = new Response(`${title(company.name)}${pretty(company)}`);
+              } else {
+                console.log('No task found', { company });
+                res = new Response(`Not found, received ${company}`);
+              }
+            } break outer;
 
-          case "/projects": {
-            if (pathId && !Number.isNaN(pathId)) {
-              const project = await cli('project', 'get', pathId, 'json');
+            case "/projects": {
+              if (pathId && !Number.isNaN(pathId)) {
+                const project = await cli('project', 'get', pathId, 'json');
 
 
-              if (project && typeof project === 'object') {
-                const tasks = await cli('project', 'list-tasks', project.id);
-                res = new Response(`${title(project.title)}
+                if (project && typeof project === 'object' && !Array.isArray(project)) {
+                  const tasks = await cli('project', 'list-tasks', project.id);
+                  const quotes = await cli('project', 'list-quotes');
+
+                  res = new Response(`${title(project.title)}
 ${pretty(project)}
 <br/>
-<button hx-get="/make-quote/${pathId}">Download quote</button>
+<button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this">Make quote</button>
+${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2)}
 <br/>
 ${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
 <article id="task-view"></article>
 ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'])}
 `);
-                break outer;
-              } else {
-                console.error('project id not found', pathId);
+                  break outer;
+                } else {
+                  console.error('project id not found', pathId);
+                }
               }
-            }
 
-            const projects = await cli('project', 'ls');
+              const projects = await cli('project', 'ls');
 
-            res = new Response(`
+              res = new Response(`
 ${overview('projects', typeof projects === 'string' ? projects : 'No projects found')}
 ${form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id: ['1', '2', '3'] })}`);
-          } break outer;
+            } break outer;
 
-          case '/make-quote': {
-            if (!pathId || Number.isNaN(pathId)) {
-              res = new Response('Missing task id');
-              break outer;
-            }
+            case '/make-quote': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing task id');
+                break outer;
+              }
 
-            const quote_url = await cli('project', 'make-quote', [['-p', pathId]], 'value');
-            if (quote_url && typeof quote_url === 'string') {
-              res = new Response();
-              res.headers.set('HX-Redirect', quote_url);
-            } else {
-              console.log('No quote url from cli')
-              res = new Response(`No url found for the quote, found ${quote_url}`);
-            }
-          } break outer;
+              // This is not working so making workaround
+              // let quote_url = await cli('project', 'make-quote', [['-p', pathId]], 'json');
+              cli('project', 'make-quote', [['-p', pathId]], 'normal');
+              res = new Response(`<button hx-get="/projects/${pathId}" hx-swap="innerHTML transition:true" hx-target="#main">Processing...<br/>click to refresh</button>`);
+              /*
+              if (Array.isArray(quote_url)) {
+                quote_url = quote_url[0] as string;
+              } else if (typeof quote_url === 'object') {
+                quote_url = quote_url.data as string;
+              }
 
-          case '/tasks': {
-            if (!pathId || Number.isNaN(pathId)) {
-              res = new Response('Missing task id');
-              break outer;
-            }
+              console.debug({ quote_url });
+              if (quote_url && typeof quote_url === 'string') {
+                quote_url = quote_url.trimEnd().slice(1);
+                quote_url = quote_url.slice(0, quote_url.length - 1);
+                if (quote_url.includes('/public/')) {
+                  quote_url = `/${quote_url.split('/public/')[1]}`
+                }
 
-            const task = await cli('project', 'get-task', pathId, 'json');
-            if (task && typeof task === 'object') {
-              res = new Response(`${pretty(task)}`);
-            } else {
-              console.log('No task found', { task })
-              res = new Response(`Not found, received ${task}`);
-            }
-          } break outer;
+                res = new Response('Done', {
+                  headers: {
+                    'HX-Redirect': quote_url
+                  }
+                })
+                //res = new Response(`<a href="${quote_url}">Download quote</a>`);
+              } else {
+                console.log('No quote url from cli');
+                res = new Response(`No url found for the quote, found ${quote_url}`);
+              }*/
+            } break outer;
 
-          case "/schedule": {
-            const schedule = await cli('schedule', 'ls');
-            res = new Response(`
+            case '/tasks': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing task id');
+                break outer;
+              }
+
+              const task = await cli('project', 'get-task', pathId, 'json');
+              if (task && typeof task === 'object') {
+                res = new Response(`${pretty(task)}`);
+              } else {
+                console.log('No task found', { task });
+                res = new Response(`Not found, received ${task}`);
+              }
+            } break outer;
+
+            case "/schedule": {
+              const schedule = await cli('schedule', 'ls');
+              res = new Response(`
 ${overview('schedule', typeof schedule === 'string' ? schedule : 'No scheduled items')}
 ${form('add-schedule', '/schedule', ['date'])}`);
-          } break outer;
+            } break outer;
 
-          case "/finance": {
-            const report = await cli('finance', 'report');
-            res = new Response(`<h1>Finance</h1>${report}`);
-          } break outer;
+            case "/finance": {
+              const report = await cli('finance', 'report');
+              res = new Response(`<h1>Finance</h1>${report}`);
+            } break outer;
 
-          default: {
-            let file = Bun.file(`./public${url.pathname}`);
-            if (await file.exists()) {
-              res = new Response(file);
-            } else {
+            default: {
+              let file = Bun.file(`./public${url.pathname}`);
+              if (await file.exists()) {
+                res = new Response(file);
+              } else {
+                res = new Response('404');
+              }
+            } break outer;
+          }
+        }
+
+        case "POST": {
+          if (!req.body) {
+            res = new Response('Body required for POST');
+            break outer;
+          }
+
+          const fields = await parseBody(req.body);
+
+          switch (path) {
+            case "/accounts": {
+              if (!fields.has('name')) {
+                res = new Response('Missing name');
+                break outer;
+              }
+
+              const id = await cli('account', 'add', [
+                ['-n', fields.get('name')],
+                ['-p', fields.get('phone')],
+                ['-c', fields.get('company_id')],
+                ['-a', fields.get('address_id')],
+                ['--company-name', fields.get('company_name')],
+                ['--country', fields.get('country')],
+                ['--city', fields.get('city')],
+                ['-s', fields.get('street')],
+                ['--number', fields.get('number')],
+                ['-u', fields.get('unit')],
+                ['--postalcode', fields.get('postalcode')],
+                ['--privacy-permissions', fields.get('privacy_permissions')],
+              ]);
+              //  console.log({ id });
+              if (id && typeof id === 'string') {
+                res = new Response(id);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            case '/company': {
+              if (!fields.has('name')) {
+                res = new Response('Missing name');
+                break outer;
+              }
+
+              const id = await cli('account', 'add-company', [
+                ['-n', fields.get('name')],
+                ['-l', fields.get('logo')],
+                ['-c', fields.get('commerce_number')],
+                ['-v', fields.get('vat_number')],
+                ['-i', fields.get('iban')],
+                ['-p', fields.get('phone')],
+                ['-e', fields.get('email')],
+                ['-a', fields.get('account_id')],
+                ['--address-id', fields.get('address_id')],
+                ['--country', fields.get('country')],
+                ['--city', fields.get('city')],
+                ['-s', fields.get('street')],
+                ['--number', fields.get('number')],
+                ['--unit', fields.get('unit')],
+                ['--postalcode', fields.get('postalcode')],
+              ]);
+
+              if (id && typeof id === 'string') {
+                res = new Response(id);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            case '/projects': {
+              if (!fields.has('title')) {
+                res = new Response('Missing title');
+                break outer;
+              }
+
+              const id = await cli('project', 'add', [
+                ['-t', fields.get('title')],
+                ['-d', fields.get('description')],
+                ['-c', fields.get('client_id')]
+              ]);
+              // console.log({ id });
+              if (id && typeof id === 'string') {
+                res = new Response(id);
+              } else {
+                res = new Response('done');
+              }
+            } break outer;
+
+            case '/task': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing project id');
+                break outer;
+              }
+              if (!fields.has('title')) {
+                res = new Response('Missing title');
+                break outer;
+              }
+
+              const id = await cli('project', 'add-task', [
+                ['-p', pathId],
+                ['-t', fields.get('title')],
+                ['-d', fields.get('description')],
+                ['--minutes-estimated', fields.get('minutes_estimated')],
+                ['--minutes-spent', fields.get('minutes_spent')],
+                ['--minutes-remaining', fields.get('minutes_remaining')],
+                ['--minutes-billed', fields.get('minutes_billed')],
+                ['--minute-rate', fields.get('minute_rate')],
+              ]);
+
+              if (id && typeof id === 'string') {
+                res = new Response(id);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            default: {
               res = new Response('404');
-            }
-          } break outer;
+            } break outer;
+          }
         }
+
+        default: {
+          res = new Response('404');
+        } break;
       }
-
-      case "POST": {
-        if (!req.body) {
-          res = new Response('Body required for POST');
-          break outer;
-        }
-
-        const fields = await parseBody(req.body);
-
-        switch (path) {
-          case "/accounts": {
-            if (!fields.has('name')) {
-              res = new Response('Missing name');
-              break outer;
-            }
-
-            const id = await cli('account', 'add', [
-              ['-n', fields.get('name')],
-              ['-p', fields.get('phone')],
-              ['-c', fields.get('company_id')],
-              ['-a', fields.get('address_id')],
-              ['--company-name', fields.get('company_name')],
-              ['--country', fields.get('country')],
-              ['--city', fields.get('city')],
-              ['-s', fields.get('street')],
-              ['--number', fields.get('number')],
-              ['-u', fields.get('unit')],
-              ['--postalcode', fields.get('postalcode')],
-              ['--privacy-permissions', fields.get('privacy_permissions')],
-            ]);
-            //  console.log({ id });
-            if (id && typeof id === 'string') {
-              res = new Response(id);
-            } else {
-              res = new Response('Done')
-            }
-          } break outer;
-
-          case '/company': {
-            if (!fields.has('name')) {
-              res = new Response('Missing name');
-              break outer;
-            }
-
-            const id = await cli('account', 'add-company', [
-              ['-n', fields.get('name')],
-              ['-l', fields.get('logo')],
-              ['-c', fields.get('commerce_number')],
-              ['-v', fields.get('vat_number')],
-              ['-i', fields.get('iban')],
-              ['-p', fields.get('phone')],
-              ['-e', fields.get('email')],
-              ['-a', fields.get('account_id')],
-              ['--address-id', fields.get('address_id')],
-              ['--country', fields.get('country')],
-              ['--city', fields.get('city')],
-              ['-s', fields.get('street')],
-              ['--number', fields.get('number')],
-              ['--unit', fields.get('unit')],
-              ['--postalcode', fields.get('postalcode')],
-            ]);
-
-            if (id && typeof id === 'string') {
-              res = new Response(id);
-            } else {
-              res = new Response('Done');
-            }
-          } break outer;
-
-          case '/projects': {
-            if (!fields.has('title')) {
-              res = new Response('Missing title');
-              break outer;
-            }
-
-            const id = await cli('project', 'add', [
-              ['-t', fields.get('title')],
-              ['-d', fields.get('description')],
-              ['-c', fields.get('client_id')]
-            ]);
-            // console.log({ id });
-            if (id && typeof id === 'string') {
-              res = new Response(id);
-            } else {
-              res = new Response('done');
-            }
-          } break outer;
-
-          case '/task': {
-            if (!pathId || Number.isNaN(pathId)) {
-              res = new Response('Missing project id');
-              break outer;
-            }
-            if (!fields.has('title')) {
-              res = new Response('Missing title');
-              break outer;
-            }
-
-            const id = await cli('project', 'add-task', [
-              ['-p', pathId],
-              ['-t', fields.get('title')],
-              ['-d', fields.get('description')],
-              ['--minutes-estimated', fields.get('minutes_estimated')],
-              ['--minutes-spent', fields.get('minutes_spent')],
-              ['--minutes-remaining', fields.get('minutes_remaining')],
-              ['--minutes-billed', fields.get('minutes_billed')],
-              ['--minute-rate', fields.get('minute_rate')],
-            ]);
-
-            if (id && typeof id === 'string') {
-              res = new Response(id);
-            } else {
-              res = new Response('Done');
-            }
-          } break outer;
-
-          default: {
-            res = new Response('404');
-          } break outer;
-        }
-      }
-
-      default: {
-        res = new Response('404');
-      } break;
+      console.debug({ res });
+      return res;
+    } catch (err) {
+      return new Response(`Error 500: ${err}`, { status: 500 })
     }
-    return res;
   }
 });

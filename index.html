@@ -85,10 +85,14 @@
       <nav>
         <ul>
           <li><a href="/">Home</a></li>
-          <li><button hx-get="/accounts" hx-swap="innerHTML transition:true" hx-target="#main">Accounts</button></li>
-          <li><button hx-get="/projects" hx-swap="innerHTML transition:true" hx-target="#main">Projects</button></li>
-          <li><button hx-get="/schedule" hx-swap="innerHTML transition:true" hx-target="#main">Schedule</button></li>
-          <li><button hx-get="/finance" hx-swap="innerHTML transition:true" hx-target="#main">Finance</button></li>
+          <li><button hx-get="/accounts" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Accounts</button></li>
+          <li><button hx-get="/projects" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Projects</button></li>
+          <li><button hx-get="/schedule" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Schedule</button></li>
+          <li><button hx-get="/finance" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Finance</button></li>
         </ul>
       </nav>
     </aside>
