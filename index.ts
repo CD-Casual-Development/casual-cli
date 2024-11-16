@@ -108,10 +108,11 @@ const htmlTail = `    </main>
 
 const CLI = {
   account: [
-    'list', 'ls', 'list-companies',
-    'add', 'add-company',
-    'get', 'get-company',
-    'remove', 'remove-company'
+    'list', 'ls', 'list-companies', 'list-addresses',
+    'add', 'add-company', 'add-address',
+    'update', 'update-company', 'update-address',
+    'get', 'get-company', 'get-address',
+    'remove', 'remove-company', 'remove-address'
   ],
   project: [
     'list', 'ls', 'list-tasks', 'list-quotes', 'list-invoices',
@@ -119,10 +120,11 @@ const CLI = {
     'get', 'get-task', 'complete-task',
     'get-quote', 'get-invoice',
     'make-quote', 'make-invoice',
-    'remove', 'remove-task'
+    'update', 'update-task', 'update-quote', 'update-invoice',
+    'remove', 'remove-task', 'remove-quote', 'remove-invoice'
   ],
-  schedule: ['list', 'ls', 'get', 'add', 'remove'],
-  finance: ['report', 'add-query', 'remove']
+  schedule: ['list', 'ls', 'get', 'add', 'update', 'remove'],
+  finance: ['report', 'add-query', 'update-report', 'update-query', 'remove', 'remove-query']
 } as const;
 type Program = keyof typeof CLI;
 type Command<T extends Program> = typeof CLI[T][number];
@@ -265,6 +267,7 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     }
     el.appendChild(btn);
   });
+
   document.querySelectorAll('.${name} [data-id]').forEach((el) => {
     if (el.querySelector('.view-button')) {
       return;
@@ -274,7 +277,8 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
       const invoiceBtn = document.createElement('button');
       invoiceBtn.setAttribute('class', 'invoice-button');
       invoiceBtn.setAttribute('hx-get', \`/make-invoice/\${el.dataset.id}\`);
-      invoiceBtn.innerText = 'Make invoice';
+      invoiceBtn.innerText = '💶';
+      invoiceBtn.setAttribute('title', 'Make invoice');
       if (typeof window.htmx !== 'undefined') {
         htmx.process(invoiceBtn);
       }
@@ -288,7 +292,8 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     btn.setAttribute('hx-swap', 'innerHTML${targetId === 'main' ? ' transition:true' : ''}');
     btn.setAttribute('hx-target', '#${targetId}');
     ${targetId === 'main' ? `btn.setAttribute('hx-push-url', 'true');` : ''}
-    btn.innerText = 'view';
+    btn.innerText = '🔍';
+    btn.setAttribute('title', 'View ${name.endsWith('s') ? name.slice(0, -1) : name}');
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
     }
@@ -423,7 +428,7 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
                   res = page(`${title(project.title)}
 ${pretty(project)}
 <br/>
-<button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this">Make quote</button>
+<button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" title="Make quote">📝</button>
 <br/>
 ${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
 ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'], undefined, true)}
@@ -515,6 +520,21 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
               }
             } break outer;
 
+            case '/invoices': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing invoice id');
+                break outer;
+              }
+
+              const invoice = await cli('project', 'get-invoice', pathId, 'json');
+              if (invoice && typeof invoice === 'object') {
+                res = new Response(`${pretty(invoice)}`);
+              } else {
+                console.log('No invoice found', { invoice });
+                res = new Response(`Not found, received ${invoice}`);
+              }
+            } break outer;
+
             case '/tasks': {
               if (!pathId || Number.isNaN(pathId)) {
                 res = new Response('Missing task id');
@@ -551,7 +571,7 @@ ${form('add-schedule', '/schedule', ['date'])}`);
               }
             } break outer;
           }
-        }
+        } break; // GET
 
         case "POST": {
           if (!req.body) {
@@ -667,6 +687,92 @@ ${form('add-schedule', '/schedule', ['date'])}`);
                 res = new Response('Done');
               }
             } break outer;
+
+            default: {
+              res = new Response('404');
+            } break outer;
+          }
+        } break; // POST
+
+        case 'DELETE': {
+          if (!pathId || Number.isNaN(pathId)) {
+            res = new Response('Missing id');
+            break outer;
+          }
+
+          switch (path) {
+            case '/accounts': {
+              const id = await cli('account', 'remove', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/companies': {
+              const id = await cli('account', 'remove-company', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/projects': {
+              const id = await cli('project', 'remove', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/tasks': {
+              const id = await cli('project', 'remove-task', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/quotes': {
+              const id = await cli('project', 'remove-quote', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/invoices': {
+              const id = await cli('project', 'remove-invoice', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/schedule': {
+              const id = await cli('schedule', 'remove', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
+            case '/finance': {
+              const id = await cli('finance', 'remove', pathId, 'value');
+              if (id && typeof id === 'string') {
+                res = new Response('Done');
+              } else {
+                res = new Response('Failed');
+              }
+            } break outer;
+
 
             default: {
               res = new Response('404');

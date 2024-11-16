@@ -174,6 +174,13 @@ pub async fn get_company(db: &SqlitePool, id: i64) -> Result<Company> {
         .map_err(anyhow::Error::msg)
 }
 
+pub async fn get_contract(db: &SqlitePool, id: i64) -> Result<Contract> {
+    sqlx::query_as!(Contract, r#"SELECT * FROM contracts WHERE id = ?"#, id)
+        .fetch_one(db)
+        .await
+        .map_err(anyhow::Error::msg)
+}
+
 pub async fn add_company(db: &SqlitePool, company: &CompanyCreateArgs) -> Result<i64> {
     let mut address_id: Option<i64> = None;
 
@@ -248,6 +255,157 @@ INSERT INTO companies (
     Ok(company_id)
 }
 
+/*
+Contract model:
+    pub id: i64,
+    pub sender_id: i64,
+    pub recipient_id: i64,
+    pub contract_type: Option<String>,
+    pub send_date: Option<NaiveDateTime>,
+    pub start_date: Option<NaiveDateTime>,
+    pub end_date: Option<NaiveDateTime>,
+    pub auto_renew: Option<bool>,
+    pub cancel_date: Option<NaiveDateTime>,
+    pub invoice_period_months: Option<i64>,
+    pub monthly_rate: Option<i64>,
+    pub contract_url: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+*/
+
+pub async fn add_contract(db: &SqlitePool, contract: &ContractCreateArgs) -> Result<i64> {
+    let contract_id = sqlx::query!(r#"
+INSERT INTO contracts (
+    sender_id,
+    recipient_id,
+    contract_type,
+    invoice_period_months,
+    monthly_rate,
+    contract_url
+) VALUES (?, ?, ?, ?, ?, ?)
+"#,
+        contract.sender_id,
+        contract.recipient_id,
+        contract.contract_type,
+        contract.invoice_period_months,
+        contract.monthly_rate,
+        contract.contract_url
+    )
+    .execute(db)
+    .await?
+    .last_insert_rowid();
+
+    Ok(contract_id)
+}
+
+pub async fn update_account(db: &SqlitePool, id: i64, account: &AccountUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE accounts SET
+        name = ?,
+        phone = ?,
+        email = ?,
+        company_id = ?,
+        address_id = ?,
+        privacy_permissions = ?
+        WHERE id = ?
+    "#,
+        account.name,
+        account.phone,
+        account.email,
+        account.company_id,
+        account.address_id,
+        account.privacy_permissions,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+pub async fn update_company(db: &SqlitePool, id: i64, company: &CompanyUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE companies SET
+        name = ?,
+        logo = ?,
+        commerce_number = ?,
+        vat_number = ?,
+        iban = ?,
+        address_id = ?
+        WHERE id = ?
+    "#,
+        company.name,
+        company.logo,
+        company.commerce_number,
+        company.vat_number,
+        company.iban,
+        company.address_id,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+pub async fn update_address(
+    db: &SqlitePool,
+    id: i64,
+    address: &AddressUpdateArgs,
+) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE address SET
+        country = ?,
+        city = ?,
+        street = ?,
+        number = ?,
+        unit = ?,
+        postalcode = ?
+        WHERE id = ?
+    "#,
+        address.country,
+        address.city,
+        address.street,
+        address.number,
+        address.unit,
+        address.postalcode,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+pub async fn update_contract(
+    db: &SqlitePool,
+    id: i64,
+    contract: &ContractUpdateArgs,
+) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE contracts SET
+        sender_id = ?,
+        recipient_id = ?,
+        contract_type = ?,
+        invoice_period_months = ?,
+        monthly_rate = ?,
+        contract_url = ?
+        WHERE id = ?
+    "#,
+        contract.sender_id,
+        contract.recipient_id,
+        contract.contract_type,
+        contract.invoice_period_months,
+        contract.monthly_rate,
+        contract.contract_url,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
 pub async fn get_project(db: &SqlitePool, id: i64) -> Result<Project> {
     sqlx::query_as!(Project, r#"SELECT * FROM projects WHERE id = ?"#, id)
         .fetch_one(db)
@@ -273,6 +431,25 @@ INSERT INTO projects (
     .last_insert_rowid();
 
     Ok(project_id)
+}
+
+pub async fn update_project(db: &SqlitePool, id: i64, project: &ProjectUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE projects SET
+        title = ?,
+        description = ?,
+        client_id = ?
+        WHERE id = ?
+    "#,
+        project.title,
+        project.description,
+        project.client_id,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
 }
 
 pub async fn get_project_task(db: &SqlitePool, id: i64) -> Result<ProjectTask> {
@@ -316,6 +493,39 @@ INSERT INTO tasks (
     }
 
     Ok(result.last_insert_rowid())
+}
+
+pub async fn update_project_task(
+    db: &SqlitePool,
+    id: i64,
+    project_task: &ProjectTaskUpdateArgs,
+) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE tasks SET
+        project_id = ?,
+        title = ?,
+        description = ?,
+        minutes_estimated = ?,
+        minutes_spent = ?,
+        minutes_remaining = ?,
+        minutes_billed = ?,
+        minute_rate = ?
+        WHERE id = ?
+    "#,
+        project_task.project_id,
+        project_task.title,
+        project_task.description,
+        project_task.minutes_estimated,
+        project_task.minutes_spent,
+        project_task.minutes_remaining,
+        project_task.minutes_billed,
+        project_task.minute_rate,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
 }
 
 pub async fn get_quote(db: &SqlitePool, id: i64) -> Result<Quote> {
@@ -362,6 +572,41 @@ INSERT INTO quotes (
     }
 
     Ok(result.last_insert_rowid())
+}
+
+pub async fn update_quote(db: &SqlitePool, id: i64, quote: &QuoteUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE quotes SET
+        sender_id = ?,
+        recipient_id = ?,
+        project_id = ?,
+        project_duration = ?,
+        remarks = ?,
+        total_before_vat = ?,
+        discount = ?,
+        vat_percentage = ?,
+        currency = ?,
+        total_after_vat = ?,
+        quote_url = ?
+        WHERE id = ?
+    "#,
+        quote.sender_id,
+        quote.recipient_id,
+        quote.project_id,
+        quote.project_duration,
+        quote.remarks,
+        quote.total_before_vat,
+        quote.discount,
+        quote.vat_percentage,
+        quote.currency,
+        quote.total_after_vat,
+        quote.quote_url,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    Ok(result.rows_affected())
 }
 
 mod quote {
@@ -1452,9 +1697,167 @@ INSERT INTO invoices (
     Ok(invoice_url)
 }
 
+pub async fn update_invoice(db: &SqlitePool, id: i64, invoice: &InvoiceUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE invoices SET
+    sender_id = ?,
+    recipient_id = ?,
+    invoice_number = ?,
+    quote_id = ?,
+    payment_due_date = ?,
+    payment_date = ?,
+    contract_id = ?,
+    project_id = ?,
+    remarks = ?,
+    total_before_vat = ?,
+    discount = ?,
+    vat_percentage = ?,
+    currency = ?,
+    total_after_vat = ?,
+    invoice_url = ?,
+    payment_request_url = ?
+WHERE id = ?"#,
+        invoice.sender_id,
+        invoice.recipient_id,
+        invoice.invoice_number,
+        invoice.quote_id,
+        invoice.payment_due_date,
+        invoice.payment_date,
+        invoice.contract_id,
+        invoice.project_id,
+        invoice.remarks,
+        invoice.total_before_vat,
+        invoice.discount,
+        invoice.vat_percentage,
+        invoice.currency,
+        invoice.total_after_vat,
+        invoice.invoice_url,
+        invoice.payment_request_url,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Failed to update invoice"));
+    }
+
+    Ok(result.rows_affected())
+}
+
 pub async fn get_schedule(db: &SqlitePool, id: i64) -> Result<Schedule> {
     sqlx::query_as!(Schedule, r#"SELECT * FROM schedule WHERE id = ?"#, id)
         .fetch_one(db)
         .await
         .map_err(anyhow::Error::msg)
+}
+
+pub async fn add_schedule(db: &SqlitePool, schedule: &ScheduleCreateArgs) -> Result<i64> {
+    let result = sqlx::query!(
+        r#"
+INSERT INTO schedule (
+    contract_id,
+    project_id,
+    invoice_id,
+    quote_id,
+    query_id,
+    date,
+    interval
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+"#,
+        schedule.contract_id,
+        schedule.project_id,
+        schedule.invoice_id,
+        schedule.quote_id,
+        schedule.query_id,
+        schedule.date,
+        schedule.interval
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Failed to insert schedule"));
+    }
+
+    Ok(result.last_insert_rowid())
+}
+
+pub async fn update_schedule(db: &SqlitePool, id: i64, schedule: &ScheduleUpdateArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE schedule SET
+    contract_id = ?,
+    project_id = ?,
+    invoice_id = ?,
+    quote_id = ?,
+    query_id = ?,
+    date = ?,
+    interval = ?
+WHERE id = ?"#,
+        schedule.contract_id,
+        schedule.project_id,
+        schedule.invoice_id,
+        schedule.quote_id,
+        schedule.query_id,
+        schedule.date,
+        schedule.interval,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Failed to update schedule"));
+    }
+
+    Ok(result.rows_affected())
+}
+/* */
+pub async fn create_report(_db: &SqlitePool, _report: &FinanceReportArgs) -> Result<i64> {
+    todo!()
+}
+
+pub async fn add_query(db: &SqlitePool, query: &FinanceCreateQueryArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"
+INSERT INTO finance_queries (
+    account_id, 
+    company_id,
+    range
+) VALUES (?, ?, ?)
+"#,
+        query.account_id,
+        query.company_id,
+        query.range
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Failed to update query"));
+    }
+
+    Ok(result.rows_affected())
+}
+
+pub async fn update_query(db: &SqlitePool, id: i64, query: &FinanceUpdateQueryArgs) -> Result<u64> {
+    let result = sqlx::query!(
+        r#"UPDATE finance_queries SET
+    account_id = ?,
+    company_id = ?,
+    range = ?
+WHERE id = ?"#,
+        query.account_id,
+        query.company_id,
+        query.range,
+        id
+    )
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(anyhow::anyhow!("Failed to update query"));
+    }
+
+    Ok(result.rows_affected())
 }
