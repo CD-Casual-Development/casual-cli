@@ -15,6 +15,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag casual-cli:$(date +%s)
+      run: docker build . --file Dockerfile --tag casualdevelopment/casual-cli:$(date +%s)
     - name: Publish the Docker image
       run: docker push casualdevelopment/casual-cli:$(date +%s)
