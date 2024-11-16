@@ -294,7 +294,10 @@ enum AccountCommands {
     },
     /// List all accounts (alias: `ls`)
     #[command(alias = "ls")]
-    List,
+    List {
+        #[arg(short, long)]
+        company_id: Option<i64>,
+    },
     ListCompanies,
 }
 
@@ -353,8 +356,24 @@ enum ProjectCommands {
         /// The project id
         id: i64,
     },
-    ListQuotes,
-    ListInvoices,
+    ListQuotes {
+        /// Project id
+        #[arg(short, long)]
+        project_id: Option<i64>,
+        #[arg(short, long)]
+        recipient_id: Option<i64>
+    },
+    ListInvoices {
+        /// Project id
+        #[arg(short, long)]
+        project_id: Option<i64>,
+        #[arg(short, long)]
+        recipient_id: Option<i64>,
+        #[arg(short, long)]
+        contract_id: Option<i64>,
+        #[arg(short, long)]
+        quote_id: Option<i64>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -465,13 +484,15 @@ async fn main() -> Result<()> {
                             log.print(format!("Company {} removed", id), id, true);
                         }
                     }
-                    AccountCommands::List => {
+                    AccountCommands::List { company_id } => {
                         log.msg("Listing all accounts".to_string());
                         log.msg("-------------------".to_string());
-                        let accounts = sqlx::query_as!(Account, "SELECT * FROM accounts")
+                        let accounts =  match company_id {
+                            Some(id) => sqlx::query_as!(Account, "SELECT * FROM accounts WHERE company_id = ?", id).fetch_all(&db_pool).await?,
+                            None => sqlx::query_as!(Account, "SELECT * FROM accounts")
                             .fetch_all(&db_pool)
-                            .await?;
-
+                            .await?
+                        };
                         log_list!(log, mode, accounts);
                     }
                     AccountCommands::ListCompanies => {
@@ -596,21 +617,52 @@ async fn main() -> Result<()> {
 
                 log_list!(log, mode, tasks);
             }
-            Some(ProjectCommands::ListQuotes) => {
+            Some(ProjectCommands::ListQuotes { project_id, recipient_id }) => {
                 log.msg("Listing all quotes".to_string());
                 log.msg("------------------".to_string());
-                let quotes = sqlx::query_as!(Quote, "SELECT * FROM quotes")
-                    .fetch_all(&db_pool)
-                    .await?;
+                let quotes = match project_id {
+                    Some(id) => sqlx::query_as!(Quote, "SELECT * FROM quotes WHERE project_id = ?", id)
+                        .fetch_all(&db_pool)
+                        .await?,
+                    None => match recipient_id {
+                        Some(id) => sqlx::query_as!(Quote, "SELECT * FROM quotes WHERE recipient_id = ?", id)
+                            .fetch_all(&db_pool)
+                            .await?,
+                        None => sqlx::query_as!(Quote, "SELECT * FROM quotes")
+                            .fetch_all(&db_pool)
+                            .await?,
+                    }
+                };
 
                 log_list!(log, mode, quotes);
             }
-            Some(ProjectCommands::ListInvoices) => {
+            Some(ProjectCommands::ListInvoices { contract_id, project_id, quote_id, recipient_id  }) => {
                 log.msg("Listing all invoices".to_string());
                 log.msg("--------------------".to_string());
-                let invoices = sqlx::query_as!(Invoice, "SELECT * FROM invoices")
-                    .fetch_all(&db_pool)
-                    .await?;
+
+                let invoices = match project_id {
+                    Some(id) => sqlx::query_as!(Invoice, "SELECT * FROM invoices WHERE project_id = ?", id)
+                        .fetch_all(&db_pool)
+                        .await?,
+                    None => match contract_id {
+                        Some(id) => sqlx::query_as!(Invoice, "SELECT * FROM invoices WHERE contract_id = ?", id)
+                            .fetch_all(&db_pool)
+                            .await?,
+                        None => match quote_id {
+                            Some(id) => sqlx::query_as!(Invoice, "SELECT * FROM invoices WHERE quote_id = ?", id)
+                                .fetch_all(&db_pool)
+                                .await?,
+                            None => match recipient_id {
+                                Some(id) => sqlx::query_as!(Invoice, "SELECT * FROM invoices WHERE recipient_id = ?", id)
+                                    .fetch_all(&db_pool)
+                                    .await?,
+                                None => sqlx::query_as!(Invoice, "SELECT * FROM invoices")
+                                    .fetch_all(&db_pool)
+                                    .await?,
+                            }
+                        }
+                    }
+                };
 
                 log_list!(log, mode, invoices);
             }

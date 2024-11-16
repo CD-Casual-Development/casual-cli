@@ -186,9 +186,21 @@ async function cli<T extends Program>(program: T, command: Command<T>, args?: [s
   }
 }
 
-function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[] | [string | number, string][]>) {
-  return `${title(id.replaceAll('-', ' '), 2)}<label for="result">Result:</label><span id="result"></span>
-<form id="${id}" hx-post="${postPath}" hx-swap="innerHTML" hx-target="#result">
+function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
+  return `${isCollapsable ? `
+    <style>
+      details>summary::after {
+        margin-top: 11px;
+        float: left;
+        margin-right: 10px;
+      }
+      summary > h3 {
+        display: inline-block;
+      }
+    </style>
+    <details><summary>${title(id.replaceAll('-', ' '), 3)}</summary>` : title(id.replaceAll('-', ' '), 2)}
+<label for="result">Result:</label><span id="result-${id}"></span>
+<form id="${id}" hx-post="${postPath}" hx-swap="innerHTML" hx-target="#result-${id}">
   ${fieldsNames.map(name => {
     let html = `<input placeholder="${name}" name="${name}" />`;
 
@@ -201,7 +213,8 @@ function form(id: string, postPath: string, fieldsNames: string[], autoComplete?
     return html;
   }).join('')}
   <button type="submit">Submit</button>
-</form>`;
+</form>
+${isCollapsable ? '</details>' : ''}`;
 }
 function title(title: string, heading: number = 1): string {
   return `<h${heading}>${decodeURIComponent(title)}</h${heading}>`;
@@ -253,6 +266,24 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     btn.setAttribute('hx-target', '#${targetId}');
     ${targetId === 'main' ? `btn.setAttribute('hx-push-url', 'true');` : ''}
     btn.innerText = 'view';
+    if (typeof window.htmx !== 'undefined') {
+      htmx.process(btn);
+    }
+    el.appendChild(btn);
+  });
+
+  document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
+    if (el.querySelector('.recipient-button')) {
+      return;
+    }
+
+    const btn = document.createElement('button');
+    btn.setAttribute('class', 'recipient-button')
+    btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
+    btn.setAttribute('hx-swap', 'innerHTML transition:true');
+    btn.setAttribute('hx-target', '#main');
+    btn.setAttribute('hx-push-url', 'true')
+    btn.innerText = 'Recipient';
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
     }
@@ -354,9 +385,9 @@ Bun.serve({
 
               res = page(`
 ${overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found')}
-${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'], { company_id, address_id })}
+${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'], { company_id, address_id }, true)}
 ${overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2)}
-${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id })}`);
+${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id }, true)}`);
             } break outer;
 
             case "/companies": {
@@ -381,13 +412,16 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
 
                 if (project && typeof project === 'object' && !Array.isArray(project)) {
                   const tasks = await cli('project', 'list-tasks', project.id);
-                  const quotes = await cli('project', 'list-quotes');
+                  const quotes = await cli('project', 'list-quotes', [['-p', pathId]]);
+                  const invoices = await cli('project', 'list-invoices', [['-p', pathId]]);
 
                   res = page(`${title(project.title)}
 ${pretty(project)}
 <br/>
 <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this">Make quote</button>
 ${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2, 'quote-view')}
+<br/>
+${overview('invoices', typeof invoices === 'string' ? invoices.replaceAll('/usr/src/app/public', '') : 'No invoices found', 2, 'invoice-view')}
 <br/>
 ${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
 ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'])}
@@ -544,7 +578,7 @@ ${form('add-schedule', '/schedule', ['date'])}`);
               ]);
               //  console.log({ id });
               if (id && typeof id === 'string') {
-                res = new Response(id);
+                res = new Response(`<button hx-get="/accounts/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to new account</button>`);
               } else {
                 res = new Response('Done');
               }
@@ -572,10 +606,10 @@ ${form('add-schedule', '/schedule', ['date'])}`);
                 ['--number', fields.get('number')],
                 ['--unit', fields.get('unit')],
                 ['--postalcode', fields.get('postalcode')],
-              ]);
+              ], 'value');
 
               if (id && typeof id === 'string') {
-                res = new Response(id);
+                res = new Response(`<button hx-get="/companies/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to new company</button>`);
               } else {
                 res = new Response('Done');
               }
@@ -591,10 +625,10 @@ ${form('add-schedule', '/schedule', ['date'])}`);
                 ['-t', fields.get('title')],
                 ['-d', fields.get('description')],
                 ['-c', fields.get('client_id')]
-              ]);
+              ], 'value');
               // console.log({ id });
               if (id && typeof id === 'string') {
-                res = new Response(id);
+                res = new Response(`<button hx-get="/projects/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to new project</button>`);
               } else {
                 res = new Response('done');
               }
@@ -619,7 +653,7 @@ ${form('add-schedule', '/schedule', ['date'])}`);
                 ['--minutes-remaining', fields.get('minutes_remaining')],
                 ['--minutes-billed', fields.get('minutes_billed')],
                 ['--minute-rate', fields.get('minute_rate')],
-              ]);
+              ], 'value');
 
               if (id && typeof id === 'string') {
                 res = new Response(id);
