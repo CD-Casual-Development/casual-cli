@@ -1,5 +1,111 @@
 import { $ } from 'bun';
 
+const htmlHead = `<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title></title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
+  <!-- HyperScript -->
+  <script src="https://unpkg.com/hyperscript"></script>
+  <!-- PicoCss -->
+  <link rel="stylesheet" href="/css/pico.min.css" />
+</head>
+
+<body>
+  <style>
+    .row {
+      display: flex;
+      flex-direction: row;
+    }
+
+    aside {
+      padding: 2rem;
+    }
+
+    main {
+      padding: 2rem;
+    }
+
+    h1:first-letter,
+    h2:first-letter {
+      text-transform: uppercase;
+    }
+
+    form {
+      display: grid;
+      gap: 20px;
+      /* define the number of grid columns */
+      grid-template-columns: repeat(3, 1fr);
+      margin: 2rem 0;
+    }
+
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+    }
+
+    @keyframes fade-out {
+      to {
+        opacity: 0;
+      }
+    }
+
+    @keyframes slide-from-right {
+      from {
+        transform: translateX(90px);
+      }
+    }
+
+    @keyframes slide-to-left {
+      to {
+        transform: translateX(-90px);
+      }
+    }
+
+    .slide-it {
+      view-transition-name: slide-it;
+    }
+
+
+    ::view-transition-old(slide-it) {
+      animation: 180ms cubic-bezier(0.4, 0, 1, 1) both fade-out,
+        600ms cubic-bezier(0.4, 0, 0.2, 1) both slide-to-left;
+    }
+
+    ::view-transition-new(slide-it) {
+      animation: 180ms cubic-bezier(0, 0, 0.2, 1) 90ms both fade-in,
+        600ms cubic-bezier(0.4, 0, 0.2, 1) both slide-from-right;
+    }
+  </style>
+  <div class="row">
+    <aside>
+      <nav>
+        <ul>
+          <li><a href="/">Home</a></li>
+          <li><button hx-get="/accounts" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Accounts</button></li>
+          <li><button hx-get="/projects" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Projects</button></li>
+          <li><button hx-get="/schedule" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Schedule</button></li>
+          <li><button hx-get="/finance" hx-swap="innerHTML transition:true" hx-target="#main"
+              hx-push-url="true">Finance</button></li>
+        </ul>
+      </nav>
+    </aside>
+    <main id="main" class="container slide-it">`;
+
+const htmlTail = `    </main>
+  </div>
+</body>
+
+</html>`;
+
 const Program = [
   'account',
   'project',
@@ -108,6 +214,7 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
     padding: 5px 18px;
   }
 </style>
+${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
 <script>
   document.querySelectorAll('.${name} [data-id]').forEach((el) => {
     if (el.querySelector('.view-button')) {
@@ -118,7 +225,7 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
     btn.setAttribute('hx-get', \`/${name}/\${el.dataset.id}\`);
     btn.setAttribute('hx-swap', 'innerHTML${targetId === 'main' ? ' transition:true' : ''}');
     btn.setAttribute('hx-target', '#${targetId}');
-    btn.setAttribute('hx-push-url', 'true');
+    ${targetId === 'main' ? `btn.setAttribute('hx-push-url', 'true');` : ''}
     btn.innerText = 'view';
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
@@ -149,6 +256,8 @@ async function parseBody(stream: ReadableStream) {
 }
 
 Bun.serve({
+  idleTimeout: 255,
+
   async fetch(req, _server) {
     try {
       // console.debug(req, server)
@@ -164,11 +273,12 @@ Bun.serve({
 
       outer: switch (method) {
         case "GET": {
-
           if (pathParts.includes('.ccli')) {
             res = new Response(Bun.file(url.pathname));
             break outer;
           }
+
+          const page = (value: string) => req.headers.get('Hx-Request') ? new Response(`${value}`) : new Response(`${htmlHead}${value}${htmlTail}`, { headers: { 'Content-Type': 'text/html' } });
 
           switch (path) {
 
@@ -185,7 +295,7 @@ Bun.serve({
                 const account = await cli('account', 'get', pathId, 'json');
 
                 if (account && typeof account === 'object' && !Array.isArray(account)) {
-                  res = new Response(`${title(account.name)}${pretty(account)}`);
+                  res = page(`${title(account.name)}${pretty(account)}`);
                   break outer;
                 } else {
                   console.error('project id not found', { pathId, account });
@@ -194,7 +304,7 @@ Bun.serve({
 
               const accounts = await cli('account', 'ls');
               const companies = await cli('account', 'list-companies');
-              res = new Response(`
+              res = page(`
 ${overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found')}
 ${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'])}
 ${overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2)}
@@ -209,7 +319,7 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
 
               const company = await cli('account', 'get-company', pathId, 'json');
               if (company && typeof company === 'object' && !Array.isArray(company)) {
-                res = new Response(`${title(company.name)}${pretty(company)}`);
+                res = page(`${title(company.name)}${pretty(company)}`);
               } else {
                 console.log('No task found', { company });
                 res = new Response(`Not found, received ${company}`);
@@ -225,14 +335,13 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
                   const tasks = await cli('project', 'list-tasks', project.id);
                   const quotes = await cli('project', 'list-quotes');
 
-                  res = new Response(`${title(project.title)}
+                  res = page(`${title(project.title)}
 ${pretty(project)}
 <br/>
 <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this">Make quote</button>
-${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2)}
+${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2, 'quote-view')}
 <br/>
 ${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
-<article id="task-view"></article>
 ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'])}
 `);
                   break outer;
@@ -243,7 +352,7 @@ ${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimate
 
               const projects = await cli('project', 'ls');
 
-              res = new Response(`
+              res = page(`
 ${overview('projects', typeof projects === 'string' ? projects : 'No projects found')}
 ${form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id: ['1', '2', '3'] })}`);
             } break outer;
@@ -267,8 +376,12 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
 
               console.debug({ quote_url });
               if (quote_url && typeof quote_url === 'string') {
-                quote_url = quote_url.trimEnd().slice(1);
-                quote_url = quote_url.slice(0, quote_url.length - 1);
+                if (quote_url.startsWith('"')) {
+                  quote_url = quote_url.trimEnd().slice(1);
+                }
+                if (quote_url.endsWith('"')) {
+                  quote_url = quote_url.slice(0, quote_url.length - 1);
+                }
                 if (quote_url.includes('/public/')) {
                   quote_url = `/${quote_url.split('/public/')[1]}`
                 }
@@ -277,12 +390,27 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
                   headers: {
                     'HX-Redirect': quote_url
                   }
-                })
+                });
                 //res = new Response(`<a href="${quote_url}">Download quote</a>`);
               } else {
                 console.log('No quote url from cli');
                 res = new Response(`No url found for the quote, found ${quote_url}`);
               }*/
+            } break outer;
+
+            case '/quotes': {
+              if (!pathId || Number.isNaN(pathId)) {
+                res = new Response('Missing quote id');
+                break outer;
+              }
+
+              const quote = await cli('project', 'get-quote', pathId, 'json');
+              if (quote && typeof quote === 'object') {
+                res = new Response(`${pretty(quote)}`);
+              } else {
+                console.log('No quote found', { quote });
+                res = new Response(`Not found, received ${quote}`)
+              }
             } break outer;
 
             case '/tasks': {
@@ -302,14 +430,14 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
 
             case "/schedule": {
               const schedule = await cli('schedule', 'ls');
-              res = new Response(`
+              res = page(`
 ${overview('schedule', typeof schedule === 'string' ? schedule : 'No scheduled items')}
 ${form('add-schedule', '/schedule', ['date'])}`);
             } break outer;
 
             case "/finance": {
               const report = await cli('finance', 'report');
-              res = new Response(`<h1>Finance</h1>${report}`);
+              res = page(`<h1>Finance</h1>${report}`);
             } break outer;
 
             default: {
