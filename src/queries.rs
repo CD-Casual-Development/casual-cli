@@ -1399,6 +1399,11 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
         generate_pdf(&pdf_args).await?
     };
 
+    let payment_due_date = chrono::NaiveDateTime::parse_from_str(
+        invoice.payment_due_date.as_ref().unwrap(),
+        "%d-%m-%Y",
+    ).unwrap_or(chrono::Local::now().naive_local());
+
     let result = sqlx::query!(
         r#"
 INSERT INTO invoices (
@@ -1424,7 +1429,7 @@ INSERT INTO invoices (
         invoice.recipient_id,
         invoice.invoice_number,
         invoice.quote_id,
-        invoice.payment_due_date,
+        payment_due_date,
         invoice.payment_date,
         invoice.contract_id,
         invoice.project_id,
