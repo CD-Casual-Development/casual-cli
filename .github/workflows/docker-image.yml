@@ -13,8 +13,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Get current date
+      id: date
+      run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag casualdevelopment/casual-cli:$(date +%s)
+      run: docker build . --file Dockerfile --tag casualdevelopment/casual-cli:${{ steps.date.outputs.date }}
     - name: Publish the Docker image
-      run: docker push casualdevelopment/casual-cli:$(date +%s)
+      run: docker push casualdevelopment/casual-cli:${{ steps.date.outputs.date }}
