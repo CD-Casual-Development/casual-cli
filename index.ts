@@ -248,6 +248,23 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
 </style>
 ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
 <script>
+  document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
+    if (el.querySelector('.recipient-button')) {
+      return;
+    }
+
+    const btn = document.createElement('button');
+    btn.setAttribute('class', 'recipient-button')
+    btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
+    btn.setAttribute('hx-swap', 'innerHTML transition:true');
+    btn.setAttribute('hx-target', '#main');
+    btn.setAttribute('hx-push-url', 'true')
+    btn.innerText = 'Recipient';
+    if (typeof window.htmx !== 'undefined') {
+      htmx.process(btn);
+    }
+    el.appendChild(btn);
+  });
   document.querySelectorAll('.${name} [data-id]').forEach((el) => {
     if (el.querySelector('.view-button')) {
       return;
@@ -264,23 +281,6 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
       el.appendChild(invoiceBtn);
     ` : ''}
 
-    document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
-      if (el.querySelector('.recipient-button')) {
-        return;
-      }
-  
-      const btn = document.createElement('button');
-      btn.setAttribute('class', 'recipient-button')
-      btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
-      btn.setAttribute('hx-swap', 'innerHTML transition:true');
-      btn.setAttribute('hx-target', '#main');
-      btn.setAttribute('hx-push-url', 'true')
-      btn.innerText = 'Recipient';
-      if (typeof window.htmx !== 'undefined') {
-        htmx.process(btn);
-      }
-      el.appendChild(btn);
-    });
 
     const btn = document.createElement('button');
     btn.setAttribute('class', 'view-button')

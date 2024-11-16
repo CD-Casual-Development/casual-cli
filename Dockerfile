@@ -16,6 +16,7 @@ COPY migrations ./migrations
 COPY templates ./templates
 COPY pdfs ./pdfs
 COPY .cargo ./.cargo
+COPY .sqlx ./.sqlx
 
 # Copy the source code
 COPY src ./src
