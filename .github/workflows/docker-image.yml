@@ -17,7 +17,10 @@ jobs:
       id: date
       run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
     - uses: actions/checkout@v4
+    - name: Log in to Docker Hub
+      run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag casualdevelopment/casual-cli:${{ steps.date.outputs.date }}
     - name: Publish the Docker image
       run: docker push casualdevelopment/casual-cli:${{ steps.date.outputs.date }}
+
