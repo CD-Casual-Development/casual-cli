@@ -240,6 +240,11 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
     float: right;
     padding: 5px 18px;
   }
+  
+  .${name} span button {
+    width: calc(100% + 8px);
+    margin-top: 12px;
+  }
 </style>
 ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
 <script>
@@ -419,12 +424,13 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
 ${pretty(project)}
 <br/>
 <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this">Make quote</button>
+<br/>
+${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
+${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'], undefined, true)}
+<br/>
 ${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2, 'quote-view')}
 <br/>
 ${overview('invoices', typeof invoices === 'string' ? invoices.replaceAll('/usr/src/app/public', '') : 'No invoices found', 2, 'invoice-view')}
-<br/>
-${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
-${form('add-task', '/task/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'])}
 `);
                   break outer;
                 } else {
