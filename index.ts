@@ -264,6 +264,24 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
       el.appendChild(invoiceBtn);
     ` : ''}
 
+    document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
+      if (el.querySelector('.recipient-button')) {
+        return;
+      }
+  
+      const btn = document.createElement('button');
+      btn.setAttribute('class', 'recipient-button')
+      btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
+      btn.setAttribute('hx-swap', 'innerHTML transition:true');
+      btn.setAttribute('hx-target', '#main');
+      btn.setAttribute('hx-push-url', 'true')
+      btn.innerText = 'Recipient';
+      if (typeof window.htmx !== 'undefined') {
+        htmx.process(btn);
+      }
+      el.appendChild(btn);
+    });
+
     const btn = document.createElement('button');
     btn.setAttribute('class', 'view-button')
     btn.setAttribute('hx-get', \`/${name}/\${el.dataset.id}\`);
@@ -271,24 +289,6 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     btn.setAttribute('hx-target', '#${targetId}');
     ${targetId === 'main' ? `btn.setAttribute('hx-push-url', 'true');` : ''}
     btn.innerText = 'view';
-    if (typeof window.htmx !== 'undefined') {
-      htmx.process(btn);
-    }
-    el.appendChild(btn);
-  });
-
-  document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
-    if (el.querySelector('.recipient-button')) {
-      return;
-    }
-
-    const btn = document.createElement('button');
-    btn.setAttribute('class', 'recipient-button')
-    btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
-    btn.setAttribute('hx-swap', 'innerHTML transition:true');
-    btn.setAttribute('hx-target', '#main');
-    btn.setAttribute('hx-push-url', 'true')
-    btn.innerText = 'Recipient';
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
     }
