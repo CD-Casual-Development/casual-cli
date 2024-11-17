@@ -301,14 +301,13 @@ INSERT INTO contracts (
 pub async fn update_account(db: &SqlitePool, id: i64, account: &AccountUpdateArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE accounts SET
-        name = ?,
-        phone = ?,
-        email = ?,
-        company_id = ?,
-        address_id = ?,
-        privacy_permissions = ?
-        WHERE id = ?
-    "#,
+        name = COALESCE(?, name),
+        phone = COALESCE(?, phone),
+        email = COALESCE(?, email),
+        company_id = COALESCE(?, company_id),
+        address_id = COALESCE(?, address_id),
+        privacy_permissions = COALESCE(?, privacy_permissions)
+        WHERE id = ?"#,
         account.name,
         account.phone,
         account.email,
@@ -326,14 +325,13 @@ pub async fn update_account(db: &SqlitePool, id: i64, account: &AccountUpdateArg
 pub async fn update_company(db: &SqlitePool, id: i64, company: &CompanyUpdateArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE companies SET
-        name = ?,
-        logo = ?,
-        commerce_number = ?,
-        vat_number = ?,
-        iban = ?,
-        address_id = ?
-        WHERE id = ?
-    "#,
+        name = COALESCE(?, name),
+        logo = COALESCE(?, logo),
+        commerce_number = COALESCE(?, commerce_number),
+        vat_number = COALESCE(?, vat_number),
+        iban = COALESCE(?, iban),
+        address_id = COALESCE(?, address_id)
+        WHERE id = ?"#,
         company.name,
         company.logo,
         company.commerce_number,
@@ -355,14 +353,13 @@ pub async fn update_address(
 ) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE address SET
-        country = ?,
-        city = ?,
-        street = ?,
-        number = ?,
-        unit = ?,
-        postalcode = ?
-        WHERE id = ?
-    "#,
+        country = COALESCE(?, country),
+        city = COALESCE(?, city),
+        street = COALESCE(?, street),
+        number = COALESCE(?, number),
+        unit = COALESCE(?, unit),
+        postalcode = COALESCE(?, postalcode)
+        WHERE id = ?"#,
         address.country,
         address.city,
         address.street,
@@ -384,14 +381,13 @@ pub async fn update_contract(
 ) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE contracts SET
-        sender_id = ?,
-        recipient_id = ?,
-        contract_type = ?,
-        invoice_period_months = ?,
-        monthly_rate = ?,
-        contract_url = ?
-        WHERE id = ?
-    "#,
+        sender_id = COALESCE(?, sender_id),
+        recipient_id = COALESCE(?, recipient_id),
+        contract_type = COALESCE(?, contract_type),
+        invoice_period_months = COALESCE(?, invoice_period_months),
+        monthly_rate = COALESCE(?, monthly_rate),
+        contract_url = COALESCE(?, contract_url)
+        WHERE id = ?"#,
         contract.sender_id,
         contract.recipient_id,
         contract.contract_type,
@@ -436,11 +432,10 @@ INSERT INTO projects (
 pub async fn update_project(db: &SqlitePool, id: i64, project: &ProjectUpdateArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE projects SET
-        title = ?,
-        description = ?,
-        client_id = ?
-        WHERE id = ?
-    "#,
+        title = COALESCE(?, title),
+        description = COALESCE(?, description),
+        client_id = COALESCE(?, client_id)
+        WHERE id = ?"#,
         project.title,
         project.description,
         project.client_id,
@@ -502,16 +497,15 @@ pub async fn update_project_task(
 ) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE tasks SET
-        project_id = ?,
-        title = ?,
-        description = ?,
-        minutes_estimated = ?,
-        minutes_spent = ?,
-        minutes_remaining = ?,
-        minutes_billed = ?,
-        minute_rate = ?
-        WHERE id = ?
-    "#,
+        project_id = COALESCE(?, project_id),
+        title = COALESCE(?, title),
+        description = COALESCE(?, description),
+        minutes_estimated = COALESCE(?, minutes_estimated),
+        minutes_spent = COALESCE(?, minutes_spent),
+        minutes_remaining = COALESCE(?, minutes_remaining),
+        minutes_billed = COALESCE(?, minutes_billed),
+        minute_rate = COALESCE(?, minute_rate)
+        WHERE id = ?"#,
         project_task.project_id,
         project_task.title,
         project_task.description,
@@ -577,19 +571,18 @@ INSERT INTO quotes (
 pub async fn update_quote(db: &SqlitePool, id: i64, quote: &QuoteUpdateArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE quotes SET
-        sender_id = ?,
-        recipient_id = ?,
-        project_id = ?,
-        project_duration = ?,
-        remarks = ?,
-        total_before_vat = ?,
-        discount = ?,
-        vat_percentage = ?,
-        currency = ?,
-        total_after_vat = ?,
-        quote_url = ?
-        WHERE id = ?
-    "#,
+        sender_id = COALESCE(?, sender_id),
+        recipient_id = COALESCE(?, recipient_id),
+        project_id = COALESCE(?, project_id),
+        project_duration = COALESCE(?, project_duration),
+        remarks = COALESCE(?, remarks),
+        total_before_vat = COALESCE(?, total_before_vat),
+        discount = COALESCE(?, discount),
+        vat_percentage = COALESCE(?, vat_percentage),
+        currency = COALESCE(?, currency),
+        total_after_vat = COALESCE(?, total_after_vat),
+        quote_url = COALESCE(?, quote_url)
+        WHERE id = ?"#,
         quote.sender_id,
         quote.recipient_id,
         quote.project_id,
@@ -1786,14 +1779,14 @@ INSERT INTO schedule (
 pub async fn update_schedule(db: &SqlitePool, id: i64, schedule: &ScheduleUpdateArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE schedule SET
-    contract_id = ?,
-    project_id = ?,
-    invoice_id = ?,
-    quote_id = ?,
-    query_id = ?,
-    date = ?,
-    interval = ?
-WHERE id = ?"#,
+        contract_id = COALESCE(?, contract_id),
+        project_id = COALESCE(?, project_id),
+        invoice_id = COALESCE(?, invoice_id),
+        quote_id = COALESCE(?, quote_id),
+        query_id = COALESCE(?, query_id),
+        date = COALESCE(?, date),
+        interval = COALESCE(?, interval)
+        WHERE id = ?"#,
         schedule.contract_id,
         schedule.project_id,
         schedule.invoice_id,
@@ -1843,10 +1836,10 @@ INSERT INTO finance_queries (
 pub async fn update_query(db: &SqlitePool, id: i64, query: &FinanceUpdateQueryArgs) -> Result<u64> {
     let result = sqlx::query!(
         r#"UPDATE finance_queries SET
-    account_id = ?,
-    company_id = ?,
-    range = ?
-WHERE id = ?"#,
+        account_id = COALESCE(?, account_id),
+        company_id = COALESCE(?, company_id),
+        range = COALESCE(?, range)
+        WHERE id = ?"#,
         query.account_id,
         query.company_id,
         query.range,
