@@ -5,7 +5,11 @@
   "scripts": {
     "start": "NODE_ENV=production bun run ./index.ts",
     "dev": "NODE_ENV=development bun run --watch ./index.ts",
-    "install:chromium": "npx @puppeteer/browsers install chromium"
+    "install:chromium": "npx @puppeteer/browsers install chromium",
+    "build:prod": "cargo build --release",
+    "build:dev": "cargo build",
+    "build:docker": "docker build -t casual-cli .",
+    "run:docker": "docker run -p 8080:3000 -it  casual-cli"
   },
   "devDependencies": {
     "@types/bun": "latest"
