@@ -1,6 +1,6 @@
 import { cli, parseBody, title, updateForm } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId?: number): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number): Promise<Response> {
     let res: Response;
 
     if (!pathId || Number.isNaN(pathId)) {

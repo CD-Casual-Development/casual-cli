@@ -1,6 +1,6 @@
-import { cli, parseBody, title, updateForm } from "../bun-helpers";
+import { cli, parseBody, title, updateForm, type ToPage } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
     if (!pathId || Number.isNaN(pathId)) {
         res = new Response('Missing company id');
@@ -28,7 +28,7 @@ export async function GET(req: Request, path: string, pathId: number, page: (con
     return res;
 }
 
-export async function POST(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function POST(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     if (!req.body) {
         return new Response('No body found');
     }

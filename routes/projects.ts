@@ -1,13 +1,13 @@
-import { cli, form, overview, parseBody, title, updateForm } from "../bun-helpers";
+import { cli, form, overview, parseBody, title, updateForm, type ToPage } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
     if (pathId && !Number.isNaN(pathId)) {
         const project = await cli('project', 'get', pathId, 'json');
 
 
         if (project && typeof project === 'object' && !Array.isArray(project)) {
-            const tasks = await cli('project', 'list-tasks', project.id);
+            const tasks = await cli('project', 'list-tasks', pathId);
             const quotes = await cli('project', 'list-quotes', [['-p', pathId]]);
             const invoices = await cli('project', 'list-invoices', [['-p', pathId]]);
             const accounts = await cli('account', 'ls', undefined, 'json');
@@ -17,9 +17,10 @@ export async function GET(req: Request, path: string, pathId: number, page: (con
             }
 
             res = page(`${title(project.title)}
-${updateForm('update-project', `/projects/${project.id}`, project, { client_id }, true)}
-<br/>
-<button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" title="Make quote">📝</button>
+            <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" class="quote-button outline" title="Make quote">📝</button>
+            <br/>
+            <br/>
+${updateForm('update-project', `/projects/${pathId}`, project, { client_id }, true)}
 <br/>
 ${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
 ${form('add-task', '/tasks/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'], undefined, true)}
@@ -46,7 +47,7 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
     return res;
 }
 
-export async function POST(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function POST(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     if (!req.body) {
         return new Response('No body found');
     }

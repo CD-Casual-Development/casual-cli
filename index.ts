@@ -20,7 +20,6 @@ if (!isProd) {
 }
 
 Bun.serve({
-  /* ts-ignore */
   idleTimeout: 255,
 
   async fetch(req, _server) {

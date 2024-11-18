@@ -1,6 +1,6 @@
-import { cli } from "../bun-helpers";
+import { cli, type ToPage } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
 
     const report = await cli('finance', 'report');

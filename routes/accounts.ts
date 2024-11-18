@@ -1,6 +1,6 @@
-import { cli, title, updateForm, overview, form, parseBody } from "../bun-helpers";
+import { cli, title, updateForm, overview, form, parseBody, type ToPage } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
     if (pathId && !Number.isNaN(pathId)) {
         const account = await cli('account', 'get', pathId, 'json');
@@ -54,7 +54,7 @@ ${overview('companies', typeof companies === 'string' ? companies : 'No companie
 ${form("add-company", "/companies", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id }, true)}`);
 }
 
-export async function POST(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function POST(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     if (!req.body) {
         return new Response('No body found');
     }
@@ -90,7 +90,7 @@ export async function POST(req: Request, path: string, pathId: number, page: (co
     return res;
 }
 
-export async function PUT(req: Request, path: string, pathId: number, page: (content: string) => Response): Promise<Response> {
+export async function PUT(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
 
     if (!pathId || Number.isNaN(pathId)) {
