@@ -1,5 +1,63 @@
 import { $ } from 'bun';
 
+const map_input_type = {
+  checkbox: (val: string) => val.startsWith('is_'),
+  'datetime-local': (val: string) => val.endsWith('_at') || val.endsWith('date'),
+  email: (val: string) => val.endsWith('email'),
+  number: (val: string) =>
+    (val.endsWith('number') && !(val.startsWith('commerce_') || val.startsWith('vat_')))
+    || val.endsWith('rate')
+    || val.startsWith('minutes_')
+    || val.endsWith('id')
+    || val.endsWith('percentage')
+    || val.startsWith('total')
+    || val.endsWith('discount'),
+  password: (val: string) =>
+    val.startsWith('password'),
+  url: (val: string) =>
+    val.endsWith('url')
+    || val.endsWith('link')
+    || val.endsWith('logo'),
+  tel: (val: string) =>
+    val.endsWith('phone'),
+};
+
+function validateInputType(field_name: string) {
+  for (const [type, check] of Object.entries(map_input_type)) {
+    if (check(field_name)) {
+      return type;
+    }
+  }
+  return 'text';
+}
+
+const map_input_autofill = {
+  off: (val: string) => val.endsWith('id'),
+  'address-line1': (val: string) => val.endsWith('street') || val.endsWith('address'),
+  'address-level2': (val: string) => val.endsWith('city'),
+  tel: (val: string) => val.endsWith('phone'),
+  email: (val: string) => val.endsWith('email'),
+  url: (val: string) => val.endsWith('url'),
+  name: (val: string) => val === 'name',
+  organization: (val: string) => val.endsWith('company'),
+  'country-name': (val: string) => val.endsWith('country'),
+  'postal-code': (val: string) => val.endsWith('postalcode'),
+};
+
+function validateAutofill(field_name: string) {
+  for (const [type, check] of Object.entries(map_input_autofill)) {
+    if (check(field_name)) {
+      return type;
+    }
+  }
+  return 'on';
+}
+
+
+function disabledField(field_name: string) {
+  return field_name === 'id' || field_name === 'created_at' || field_name === 'updated_at';
+}
+
 const htmlHead = `<!DOCTYPE html>
 <html lang="en">
 
@@ -8,80 +66,16 @@ const htmlHead = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- HTMX -->
-  <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
+  <script src="/js/htmx.min.js"></script>
   <!-- HyperScript -->
-  <script src="https://unpkg.com/hyperscript"></script>
+  <script src="/js/hyperscript.js"></script>
   <!-- PicoCss -->
-  <link rel="stylesheet" href="/css/pico.min.css" />
+  <link rel="stylesheet" href="/css/pico/pico.min.css" />
+  <link rel="stylesheet" href="/css/casual-cli.css" />
+  <script src="/js/accordion.js" async defer></script
 </head>
 
 <body>
-  <style>
-    .row {
-      display: flex;
-      flex-direction: row;
-    }
-
-    aside {
-      padding: 2rem;
-    }
-
-    main {
-      padding: 2rem;
-    }
-
-    h1:first-letter,
-    h2:first-letter {
-      text-transform: uppercase;
-    }
-
-    form {
-      display: grid;
-      gap: 20px;
-      /* define the number of grid columns */
-      grid-template-columns: repeat(3, 1fr);
-      margin: 2rem 0;
-    }
-
-    @keyframes fade-in {
-      from {
-        opacity: 0;
-      }
-    }
-
-    @keyframes fade-out {
-      to {
-        opacity: 0;
-      }
-    }
-
-    @keyframes slide-from-right {
-      from {
-        transform: translateX(90px);
-      }
-    }
-
-    @keyframes slide-to-left {
-      to {
-        transform: translateX(-90px);
-      }
-    }
-
-    .slide-it {
-      view-transition-name: slide-it;
-    }
-
-
-    ::view-transition-old(slide-it) {
-      animation: 180ms cubic-bezier(0.4, 0, 1, 1) both fade-out,
-        600ms cubic-bezier(0.4, 0, 0.2, 1) both slide-to-left;
-    }
-
-    ::view-transition-new(slide-it) {
-      animation: 180ms cubic-bezier(0, 0, 0.2, 1) 90ms both fade-in,
-        600ms cubic-bezier(0.4, 0, 0.2, 1) both slide-from-right;
-    }
-  </style>
   <div class="row">
     <aside>
       <nav>
@@ -143,7 +137,7 @@ function pretty(json: object): string {
 
 const isProd = Bun.env.NODE_ENV === "production";
 
-async function cli<T extends Program>(program: T, command: Command<T>, args?: [string, string | number][] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
+async function cli<T extends Program>(program: T, command: Command<T>, args?: ([string, string | number] | number)[] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
   let argsString: '' | number | { raw: string; } = '';
 
@@ -151,11 +145,16 @@ async function cli<T extends Program>(program: T, command: Command<T>, args?: [s
     argsString = args;
   } else if (args && args.length > 0) {
     argsString = {
-      raw: args.map(([param, value]) => {
-        if (param.startsWith('-') && value) {
-          return `${param} ${value}`;
+      raw: args.map((arg) => {
+        if (typeof arg === 'number') {
+          return `${arg}`;
         } else {
-          return false;
+          const [param, value] = arg;
+          if (param.startsWith('-') && value) {
+            return `${param} ${value}`;
+          } else {
+            return false;
+          }
         }
       }).filter(Boolean).join(' ')
     };
@@ -188,6 +187,41 @@ async function cli<T extends Program>(program: T, command: Command<T>, args?: [s
   }
 }
 
+function updateForm(id: string, putPath: string, fields: Record<string, string | number>, autoComplete?: Record<string, string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
+  return `${isCollapsable ? `
+    <style>
+      details>summary::after {
+        margin-top: 11px;
+        float: left;
+        margin-right: 10px;
+      }
+      summary > h3 {
+        display: inline-block;
+      }
+    </style>
+    <details><summary>${title(id.replaceAll('-', ' '), 3)}</summary><div class="content">` : title(id.replaceAll('-', ' '), 2)}
+<label for="result">Result:</label><span id="result-${id}"></span>
+<form id="${id}" hx-put="${putPath}" hx-swap="innerHTML" hx-target="#result-${id}">
+  ${Object.entries(fields).map(([name, value]) => {
+    const inputArgs = `id="${id}-${name}" ${disabledField(name) ? 'disabled' : ''} autofill=${validateAutofill(name)} type="${validateInputType(name)}" ${validateInputType(name) === 'number' ? 'min="1"' : ''} ${validateInputType(name) === 'datetime-local' ? `value="${value}"` : `placeholder="${typeof value === 'string' ? decodeURIComponent(value) : value}"`}  name="${name}"`;
+
+    let html = `<div><label for="${id}-${name}">${name}</label>`;
+    if (autoComplete && autoComplete[name]) {
+      html += `<input ${inputArgs} list="datalist-${name}" />`;
+      html += `<datalist id="datalist-${name}">${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}">${val[1]}</option>` : `<option>${val}</option>`).join('')}</datalist>`;
+    } else {
+      html += `<input ${inputArgs} />`;
+    }
+    html += '</div>';
+
+    return html;
+  }).join('')}
+  <button type="submit">Submit</button>
+</form>
+${isCollapsable ? '</div></details>' : ''}`;
+}
+
+
 function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
   return `${isCollapsable ? `
     <style>
@@ -200,15 +234,16 @@ function form(id: string, postPath: string, fieldsNames: string[], autoComplete?
         display: inline-block;
       }
     </style>
-    <details><summary>${title(id.replaceAll('-', ' '), 3)}</summary>` : title(id.replaceAll('-', ' '), 2)}
+    <details><summary>${title(id.replaceAll('-', ' '), 3)}</summary><div class="content">` : title(id.replaceAll('-', ' '), 2)}
 <label for="result">Result:</label><span id="result-${id}"></span>
 <form id="${id}" hx-post="${postPath}" hx-swap="innerHTML" hx-target="#result-${id}">
   ${fieldsNames.map(name => {
-    let html = `<input placeholder="${name}" name="${name}" />`;
+    const inputArgs = `type="${validateInputType(name)}" autofill=${validateAutofill(name)} ${validateInputType(name) === 'number' ? 'min="1"' : ''} placeholder="${name}" name="${name}"`;
+    let html = `<input ${inputArgs} />`;
 
 
     if (autoComplete && autoComplete[name]) {
-      html = `<input placeholder="${name}" name="${name}" list="datalist-${name}" />`;
+      html = `<input ${inputArgs} list="datalist-${name}" />`;
       html += `<datalist id="datalist-${name}">${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}">${val[1]}</option>` : `<option>${val}</option>`).join('')}</datalist>`;
     }
 
@@ -216,7 +251,7 @@ function form(id: string, postPath: string, fieldsNames: string[], autoComplete?
   }).join('')}
   <button type="submit">Submit</button>
 </form>
-${isCollapsable ? '</details>' : ''}`;
+${isCollapsable ? '</div></details>' : ''}`;
 }
 function title(title: string, heading: number = 1): string {
   return `<h${heading}>${decodeURIComponent(title)}</h${heading}>`;
@@ -250,28 +285,39 @@ function overview(name: string, dataHtml: string, heading: number = 1, targetId:
 </style>
 ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
 <script>
-  document.querySelectorAll('.${name} [data-recipient-id]').forEach((el) => {
-    if (el.querySelector('.recipient-button')) {
-      return;
-    }
-
-    const btn = document.createElement('button');
-    btn.setAttribute('class', 'recipient-button')
-    btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
-    btn.setAttribute('hx-swap', 'innerHTML transition:true');
-    btn.setAttribute('hx-target', '#main');
-    btn.setAttribute('hx-push-url', 'true')
-    btn.innerText = 'Recipient';
-    if (typeof window.htmx !== 'undefined') {
-      htmx.process(btn);
-    }
-    el.appendChild(btn);
-  });
 
   document.querySelectorAll('.${name} [data-id]').forEach((el) => {
     if (el.querySelector('.view-button')) {
       return;
     }
+    
+    const docFragment = document.createDocumentFragment();
+    
+    if (el.dataset.recipientId !== undefined && el.dataset.recipientId !== '') {
+      const btn = document.createElement('button');
+      btn.setAttribute('class', 'recipient-button')
+      btn.setAttribute('hx-get', \`/accounts/\${el.dataset.recipientId}\`);
+      btn.setAttribute('hx-swap', 'innerHTML transition:true');
+      btn.setAttribute('hx-target', '#main');
+      btn.setAttribute('hx-push-url', 'true')
+      btn.innerText = 'Recipient';
+      if (typeof window.htmx !== 'undefined') {
+        htmx.process(btn);
+      }
+      docFragment.appendChild(btn);
+    }
+    
+    const deleteBtn = document.createElement('button');
+    deleteBtn.setAttribute('class', 'delete-button');
+    deleteBtn.setAttribute('hx-delete', \`/${name}/\${el.dataset.id}\`);
+    deleteBtn.setAttribute('hx-swap', 'innerHTML transition:true');
+    deleteBtn.setAttribute('hx-target', '#${targetId}');
+    deleteBtn.innerText = '❌';
+    deleteBtn.setAttribute('title', 'Delete');
+    if (typeof window.htmx !== 'undefined') {
+      htmx.process(deleteBtn);
+    }
+    docFragment.appendChild(deleteBtn);
 
     ${targetId === 'quote-view' ? `
       const invoiceBtn = document.createElement('button');
@@ -282,7 +328,7 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
       if (typeof window.htmx !== 'undefined') {
         htmx.process(invoiceBtn);
       }
-      el.appendChild(invoiceBtn);
+      docFragment.appendChild(invoiceBtn);
     ` : ''}
 
 
@@ -297,7 +343,8 @@ ${targetId !== 'main' ? `<article id="${targetId}"></article>` : ''}
     if (typeof window.htmx !== 'undefined') {
       htmx.process(btn);
     }
-    el.appendChild(btn);
+    docFragment.appendChild(btn);
+    el.appendChild(docFragment);
   });
 </script>`;
 }
@@ -351,7 +398,7 @@ Bun.serve({
           switch (path) {
 
             case "/": {
-              res = new Response(Bun.file('./index.html'));
+              res = new Response(`${htmlHead}${title('Home')}<p>Nothing here</p>${htmlTail}`, { headers: { 'Content-Type': 'text/html' } });
             } break outer;
 
             case "/hello": {
@@ -363,7 +410,20 @@ Bun.serve({
                 const account = await cli('account', 'get', pathId, 'json');
 
                 if (account && typeof account === 'object' && !Array.isArray(account)) {
-                  res = page(`${title(account.name)}${pretty(account)}`);
+                  const companies = await cli('account', 'list-companies', undefined, 'json');
+                  const addresses = await cli('account', 'list-addresses', undefined, 'json');
+                  let company_id: [string | number, string][] = [];
+                  if (companies && Array.isArray(companies)) {
+                    company_id = companies.map((company) => [company.id, company.name]);
+                  }
+                  let address_id: [string | number, string][] = [];
+                  if (addresses && Array.isArray(addresses)) {
+                    address_id = addresses.map((address) => [address.id, `${address.city}, ${address.street} ${address.number}${address.unit}`]);
+                  }
+
+
+                  res = page(`${title(account.name)}
+                  ${updateForm('update-account', `/accounts/${account.id}`, account, { company_id, address_id }, true)}`);
                   break outer;
                 } else {
                   console.error('project id not found', { pathId, account });
@@ -408,7 +468,18 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
 
               const company = await cli('account', 'get-company', pathId, 'json');
               if (company && typeof company === 'object' && !Array.isArray(company)) {
-                res = page(`${title(company.name)}${pretty(company)}`);
+                const accounts = await cli('account', 'ls', undefined, 'json');
+                let account_id: [string | number, string][] = [];
+                if (accounts && Array.isArray(accounts)) {
+                  account_id = accounts.map((account) => [account.id, account.name]);
+                }
+                const addresses = await cli('account', 'list-addresses', undefined, 'json');
+                let address_id: [string | number, string][] = [];
+                if (addresses && Array.isArray(addresses)) {
+                  address_id = addresses.map((address) => [address.id, `${address.city}, ${address.street} ${address.number}${address.unit}`]);
+                }
+
+                res = page(`${title(company.name)}${updateForm('update-company', `/companies/${company.id}`, company, { account_id, address_id }, true)}`);
               } else {
                 console.log('No task found', { company });
                 res = new Response(`Not found, received ${company}`);
@@ -424,9 +495,14 @@ ${form("add-company", "/company", ['name', 'logo', 'commerce_number', 'vat_numbe
                   const tasks = await cli('project', 'list-tasks', project.id);
                   const quotes = await cli('project', 'list-quotes', [['-p', pathId]]);
                   const invoices = await cli('project', 'list-invoices', [['-p', pathId]]);
+                  const accounts = await cli('account', 'ls', undefined, 'json');
+                  let client_id: [string | number, string][] = [];
+                  if (accounts && Array.isArray(accounts)) {
+                    client_id = accounts.map((account) => [account.id, account.name]);
+                  }
 
                   res = page(`${title(project.title)}
-${pretty(project)}
+${updateForm('update-project', `/projects/${project.id}`, project, { client_id }, true)}
 <br/>
 <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" title="Make quote">📝</button>
 <br/>
@@ -470,7 +546,7 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
               } else if (typeof quote_url === 'object') {
                 quote_url = quote_url.data as string;
               }
-
+ 
               console.debug({ quote_url });
               if (quote_url && typeof quote_url === 'string') {
                 if (quote_url.startsWith('"')) {
@@ -482,7 +558,7 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
                 if (quote_url.includes('/public/')) {
                   quote_url = `/${quote_url.split('/public/')[1]}`
                 }
-
+ 
                 res = new Response('Done', {
                   headers: {
                     'HX-Redirect': quote_url
@@ -542,8 +618,8 @@ ${form('add-project', '/projects', ['title', 'description', 'client_id'], { clie
               }
 
               const task = await cli('project', 'get-task', pathId, 'json');
-              if (task && typeof task === 'object') {
-                res = new Response(`${pretty(task)}`);
+              if (task && typeof task === 'object' && !Array.isArray(task)) {
+                res = new Response(`${updateForm('update-task', `/tasks/${task.id}`, task, undefined, true)}`);
               } else {
                 console.log('No task found', { task });
                 res = new Response(`Not found, received ${task}`);
@@ -693,6 +769,105 @@ ${form('add-schedule', '/schedule', ['date'])}`);
             } break outer;
           }
         } break; // POST
+
+        case 'PUT': {
+          if (!pathId || Number.isNaN(pathId)) {
+            res = new Response('Missing id');
+            break outer;
+          }
+
+          if (!req.body) {
+            res = new Response('Body required for POST');
+            break outer;
+          }
+
+          const fields = await parseBody(req.body);
+
+          switch (path) {
+            case '/accounts': {
+              const id = await cli('account', 'update', [
+                pathId,
+                ['-n', fields.get('name')],
+                ['-p', fields.get('phone')],
+                ['-c', fields.get('company_id')],
+                ['-a', fields.get('address_id')],
+                ['--company-name', fields.get('company_name')],
+                ['--country', fields.get('country')],
+                ['--city', fields.get('city')],
+                ['-s', fields.get('street')],
+                ['--number', fields.get('number')],
+                ['-u', fields.get('unit')],
+                ['--postalcode', fields.get('postalcode')],
+                ['--privacy-permissions', fields.get('privacy_permissions')],
+              ], 'value');
+
+              if (id && typeof id === 'string') {
+                res = new Response(`<button hx-get="/accounts/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to updated account</button>`);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            case '/companies': {
+              const id = await cli('account', 'update-company', [
+                pathId,
+                ['-n', fields.get('name')],
+                ['-l', fields.get('logo')],
+                ['-c', fields.get('commerce_number')],
+                ['-v', fields.get('vat_number')],
+                ['-i', fields.get('iban')],
+                ['-p', fields.get('phone')],
+                ['-e', fields.get('email')],
+                ['-a', fields.get('account_id')],
+                ['--address-id', fields.get('address_id')]
+              ], 'value');
+
+              if (id && typeof id === 'string') {
+                res = new Response(`<button hx-get="/companies/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to updated company</button>`);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            case '/projects': {
+              const id = await cli('project', 'update', [
+                pathId,
+                ['-t', fields.get('title')],
+                ['-d', fields.get('description')],
+                ['-c', fields.get('client_id')]
+              ], 'value');
+
+              if (id && typeof id === 'string') {
+                res = new Response(`<button hx-get="/projects/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to updated project</button>`);
+              } else {
+                res = new Response('done');
+              }
+            } break outer;
+
+            case '/tasks': {
+              const id = await cli('project', 'update-task', [
+                pathId,
+                ['-t', fields.get('title')],
+                ['-d', fields.get('description')],
+                ['--minutes-estimated', fields.get('minutes_estimated')],
+                ['--minutes-spent', fields.get('minutes_spent')],
+                ['--minutes-remaining', fields.get('minutes_remaining')],
+                ['--minutes-billed', fields.get('minutes_billed')],
+                ['--minute-rate', fields.get('minute_rate')],
+              ], 'value');
+
+              if (id && typeof id === 'string') {
+                res = new Response(id);
+              } else {
+                res = new Response('Done');
+              }
+            } break outer;
+
+            default: {
+              res = new Response('404');
+            } break outer;
+          }
+        } break; // PUT
 
         case 'DELETE': {
           if (!pathId || Number.isNaN(pathId)) {
