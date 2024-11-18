@@ -19,7 +19,7 @@ label:first-letter {
 
 .view-button, .delete-button, .recipient-button, .invoice-button, .quote-button {
   width: 34px;
-  height: 39px;
+  height: min(100%, 42px);
   padding: 0;
   margin: 0;
   margin-right: 9px;
