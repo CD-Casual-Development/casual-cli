@@ -1,30 +1,32 @@
 import { type ToPage, cli, overview, form, updateForm, title, parseBody } from "../bun-helpers";
 
-export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
+export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response | undefined> {
     let res: Response;
 
-    if (pathId && !Number.isNaN(pathId)) {
-        const contract = await cli('account', 'get-contract', pathId, 'json');
+    if (!pathId && Number.isNaN(pathId)) {
+        res = new Response('Missing contract id');
+        return res;
+    }
+    const contract = await cli('account', 'get-contract', pathId, 'json');
 
-        if (contract && typeof contract === 'object' && !Array.isArray(contract)) {
-            const client = await cli('account', 'get', contract.client_id, 'json');
-            if (!client || typeof client !== 'object' || Array.isArray(client)) {
-                return new Response('Client not found');
-            }
-            res = page(
-                title(contract.title),
-                updateForm('update-contract', `/contracts/${pathId}`, contract, { client_id: [contract.client_id, client.name] }, true)
-            );
-            return res;
+    if (contract && typeof contract === 'object' && !Array.isArray(contract)) {
+        const client = await cli('account', 'get', contract.client_id, 'json');
+        if (!client || typeof client !== 'object' || Array.isArray(client)) {
+            return new Response('Client not found');
         }
-
-        const contracts = await cli('account', 'list-contracts');
         res = page(
-            overview('contracts', typeof contracts === 'string' ? contracts : 'No contracts found'),
-            form('add-contract', '/contracts', ['title', 'description', 'client_id'])
+            title(contract.title),
+            updateForm('update-contract', `/contracts/${pathId}`, contract, { client_id: [contract.client_id, client.name] }, true)
         );
         return res;
     }
+
+    const contracts = await cli('account', 'list-contracts');
+    res = page(
+        overview('contracts', typeof contracts === 'string' ? contracts : 'No contracts found'),
+        form('add-contract', '/contracts', ['title', 'description', 'client_id'])
+    );
+    return res;
 }
 
 export async function POST(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
@@ -63,7 +65,7 @@ export async function POST(req: Request, path: string, pathId: number, page: ToP
     const id = await cli('account', 'add-contract', [
         ['-s', fields.get('sender_id')],
         ['-r', fields.get('recipient_id')],
-        ['-t', fields.get('contract_type')],
+        ['-c', fields.get('contract_type')],
         ['-i', fields.get('invoice_period_months')],
         ['--monthly-rate', fields.get('monthly_rate')],
         ['--contract-url', fields.get('contract_url')],
@@ -71,6 +73,38 @@ export async function POST(req: Request, path: string, pathId: number, page: ToP
 
     if (id && typeof id === 'string') {
         res = new Response(`<button hx-get="/contracts/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to new contract</button>`);
+    } else {
+        res = new Response('done');
+    }
+    return res;
+}
+
+export async function PUT(req: Request, path: string, pathId: number): Promise<Response> {
+    let res: Response;
+    if (!pathId || Number.isNaN(pathId)) {
+        res = new Response('Missing id');
+        return res;
+    }
+
+    if (!req.body) {
+        res = new Response('Body required for POST');
+        return res;
+    }
+
+    const fields = await parseBody(req.body);
+
+    const id = await cli('account', 'update-contract', [
+        pathId,
+        ['-s', fields.get('sender_id')],
+        ['-r', fields.get('recipient_id')],
+        ['-c', fields.get('contract_type')],
+        ['-i', fields.get('invoice_period_months')],
+        ['--monthly-rate', fields.get('monthly_rate')],
+        ['--contract-url', fields.get('contract_url')],
+    ], 'value');
+
+    if (id && typeof id === 'string') {
+        res = new Response(`<button hx-get="/contracts/${id}" hx-swap="innerHTML transition:true" hx-target="#main">Go to updated contract</button>`);
     } else {
         res = new Response('done');
     }

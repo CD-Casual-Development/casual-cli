@@ -155,8 +155,26 @@ impl ToHtml for Contract {
         let id = self.id;
         let recipient_id = self.recipient_id;
         let sender_id = self.sender_id;
+        let status: String = if self.cancel_date.is_some() {
+            "Cancelled".to_string()
+        } else if self.auto_renew.is_some_and(|x| x) {
+            "Auto Renew".to_string()
+        } else if self.end_date.is_some() && self.start_date.is_some() {
+            let ed = self.end_date.unwrap();
+            let sd = self.start_date.unwrap();
+            
+            if ed < chrono::Utc::now().naive_utc() {
+                "Expired".to_string()
+            } else if sd > chrono::Utc::now().naive_utc() {
+                "Pending".to_string()
+            } else {
+                "Active".to_string()
+            }
+        } else {
+            "Active".to_string()
+        };
 
-        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\" data-sender-id=\"{sender_id}\">Contract</span>");
+        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\" data-sender-id=\"{sender_id}\">Contract status: {status}</span>");
     }
 }
 
@@ -188,7 +206,7 @@ impl ToHtml for Quote {
             .ok_or("#not-found")
             .expect("Unable to get quote_url");
 
-        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\">Quote: <a href=\"{quote_url}\">{quote_url}</a></span>");
+        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\"{}>Quote: <a href=\"{quote_url}\" target=\"_blank\">{quote_url}</a></span>");
     }
 }
 
@@ -202,15 +220,177 @@ impl ToHtml for Invoice {
             .ok_or("#not-found")
             .expect("Unable to get quote_url");
 
-        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\">Invoice: <a href=\"{invoice_url}\">{invoice_url}</a></span>");
+        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\">Invoice: <a href=\"{invoice_url}\" target=\"_blank\">{invoice_url}</a></span>");
     }
 }
 
 impl ToHtml for Schedule {
     fn to_html(&self) -> String {
         let id = self.id;
+        let date = match self.date {
+            Some(d) => format!("{}", d.format("%d-%m-%Y")),
+            None => "never".to_string(),
+        };
+        let interval = self.interval.clone().unwrap_or("".to_string());
 
-        return format!("<span data-id=\"{id}\">Schedule</span>");
+        return format!("<span data-id=\"{id}\"{}{}{}{}>Scheduled {date} every {interval}</span>",
+            self.contract_id.map_or("".to_string(), |x| format!(" data-contract-id=\"{}\"", x)),
+            self.project_id.map_or("".to_string(), |x| format!(" data-project-id=\"{}\"", x)),
+            self.invoice_id.map_or("".to_string(), |x| format!(" data-invoice-id=\"{}\"", x)),
+            self.quote_id.map_or("".to_string(), |x| format!(" data-quote-id=\"{}\"", x))
+        );
+    }
+}
+
+impl ToHtml for FinanceReport {
+    fn to_html(&self) -> String {
+        let id = self.id;
+        let from_date = match self.from_date {
+            Some(d) => format!("{}", d.format("%d-%m-%Y")),
+            None => "never".to_string(),
+        }
+        let to_date = match self.to_date {
+            Some(d) => format!("{}", d.format("%d-%m-%Y")),
+            None => "never".to_string(),
+        }
+
+        return format!("<span data-id=\"{id}\"{}{}{}>Report: {from_date} to {to_date}</span>",
+            self.account_id.map_or("".to_string(), |x| format!(" data-account-id=\"{}\"", x)),
+            self.company_id.map_or("".to_string(), |x| format!(" data-company-id=\"{}\"", x)),
+            self.query_id.map_or("".to_string(), |x| format!(" data-query-id=\"{}\"", x))
+        );
+    }
+}
+
+impl ToHtml for FinanceQuery {
+    fn to_html(&self) -> String {
+        let id = self.id;
+        let range = self.range.clone().unwrap_or("No range".to_string());
+        
+        return format!("<span data-id=\"{id}\"{}{}>Query: {range}</span>",
+            self.account_id.map_or("".to_string(), |x| format!(" data-account-id=\"{}\"", x)),
+            self.company_id.map_or("".to_string(), |x| format!(" data-company-id=\"{}\"", x))
+        );
+    }
+}
+
+impl ToHtml for Vec<String> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for string in self {
+            html.push_str(&string.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Account> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for account in self {
+            html.push_str(&account.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Company> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for company in self {
+            html.push_str(&company.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Address> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for address in self {
+            html.push_str(&address.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Contract> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for contract in self {
+            html.push_str(&contract.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Project> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for project in self {
+            html.push_str(&project.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<ProjectTask> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for task in self {
+            html.push_str(&task.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Quote> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for quote in self {
+            html.push_str(&quote.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Invoice> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for invoice in self {
+            html.push_str(&invoice.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<Schedule> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for schedule in self {
+            html.push_str(&schedule.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<FinanceReport> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for report in self {
+            html.push_str(&report.to_html());
+        }
+        return html;
+    }
+}
+
+impl ToHtml for Vec<FinanceQuery> {
+    fn to_html(&self) -> String {
+        let mut html = String::new();
+        for query in self {
+            html.push_str(&query.to_html());
+        }
+        return html;
     }
 }
 

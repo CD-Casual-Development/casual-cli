@@ -10,8 +10,15 @@ export async function GET(req: Request, path: string, pathId?: number): Promise<
     }
 
     const invoice = await cli('project', 'get-invoice', pathId, 'json');
-    if (invoice && typeof invoice === 'object') {
-        res = new Response(`${pretty(invoice)}`);
+    if (invoice && typeof invoice === 'object' && !Array.isArray(invoice)) {
+        res = new Response(
+            `<embed width="100%"
+                style="aspect-ratio: 4 / 3; min-height: 300px;"
+                src="${invoice.invoice_url.startsWith(process.env.CCLI_OUTPUT_DIR)
+                ? invoice.invoice_url.replace(process.env.CCLI_OUTPUT_DIR, '/pdfs')
+                : invoice.invoice_url}" type="application/pdf" />
+            <br/>
+            ${pretty(invoice)}`);
     } else {
         console.warn('No invoice found', { invoice });
         res = new Response(`Not found, received ${invoice}`);

@@ -9,8 +9,15 @@ export async function GET(req: Request, path: string, pathId?: number): Promise<
     }
 
     const quote = await cli('project', 'get-quote', pathId, 'json');
-    if (quote && typeof quote === 'object') {
-        res = new Response(`${pretty(quote)}`);
+    if (quote && typeof quote === 'object' && !Array.isArray(quote)) {
+        res = new Response(
+            `<embed width="100%"
+                style="aspect-ratio: 4 / 3; min-height: 300px;"
+                src="${quote.quote_url.startsWith(process.env.CCLI_OUTPUT_DIR)
+                ? quote.quote_url.replace(process.env.CCLI_OUTPUT_DIR, '/pdfs')
+                : quote.quote_url}" type="application/pdf" />
+            <br/>
+            ${pretty(quote)}`);
     } else {
         console.warn('No quote found', { quote });
         res = new Response(`Not found, received ${quote}`);

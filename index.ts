@@ -1,6 +1,6 @@
 
 import fs from 'node:fs';
-import { cli, form, htmlHead, htmlTail, isProd, overview, pretty, title, updateForm, type Route, type ToPage } from './bun-helpers';
+import { cli, form, HTML_HEAD, HTML_TAIL, IS_PROD, overview, pretty, title, updateForm, type Route, type ToPage } from './bun-helpers';
 
 const routes = fs.readdirSync('./routes').map((file) => {
   const path = file.split('.')[0];
@@ -15,7 +15,7 @@ const routes = fs.readdirSync('./routes').map((file) => {
   return acc;
 }, {} as Record<string, Record<string, Route>>);
 
-if (!isProd) {
+if (!IS_PROD) {
   console.debug({ routes });
 }
 
@@ -33,7 +33,7 @@ Bun.serve({
       // const queryParams = url.searchParams;
       const method = req.method;
 
-      const page: ToPage = (...value: string[]) => req.headers.get('Hx-Request') ? new Response(`${value.join('')}`) : new Response(`${htmlHead}${value.join('')}${htmlTail}`, { headers: { 'Content-Type': 'text/html' } });
+      const page: ToPage = (...value: string[]) => req.headers.get('Hx-Request') ? new Response(`${value.join('')}`) : new Response(`${HTML_HEAD}${value.join('')}${HTML_TAIL}`, { headers: { 'Content-Type': 'text/html' } });
 
       let res: Response;
 
@@ -45,7 +45,7 @@ Bun.serve({
         if (method === 'GET') {
           let file = Bun.file(`./public${url.pathname}`);
           if (await file.exists()) {
-            res = new Response(file);
+            res = new Response(file, url.pathname.endsWith('.pdf') && req.headers.get('Hx-Request') ? { headers: { 'Content-Disposition': `attachment; filename="${file.name}"` } } : undefined);
           } else {
             res = new Response('404', { status: 404 });
           }

@@ -12,7 +12,8 @@ export async function waitTillFileCreatedAndRedirect(predictedNames: string | st
     if (eventType === 'rename' && (predictedNames.some(name => filename?.includes(name)))) {
       res = new Response('Done', {
         headers: {
-          'HX-Redirect': `/pdfs/${filename}`
+          'Hx-Redirect': `/pdfs/${filename}`,
+          'Hx-Request': 'true',
         }
       });
     }
@@ -30,6 +31,8 @@ export async function waitTillFileCreatedAndRedirect(predictedNames: string | st
 }
 
 export type ToPage = (...html: string[]) => Response;
+export type Route = (req: Request, path: string, pathId: number, page: ToPage) => Promise<Response>;
+
 
 export const map_input_type = {
   checkbox: (val: string) => val.startsWith('is_'),
@@ -52,7 +55,7 @@ export const map_input_type = {
     || val.endsWith('logo'),
   tel: (val: string) =>
     val.endsWith('phone'),
-};
+} as const;
 
 export function validateInputType(field_name: string) {
   for (const [type, check] of Object.entries(map_input_type)) {
@@ -74,7 +77,7 @@ export const map_input_autofill = {
   organization: (val: string) => val === 'company_name',
   'country-name': (val: string) => val.endsWith('country'),
   'postal-code': (val: string) => val.endsWith('postalcode'),
-};
+} as const;
 
 export function validateAutofill(field_name: string) {
   for (const [type, check] of Object.entries(map_input_autofill)) {
@@ -89,7 +92,7 @@ export function disabledField(field_name: string) {
   return field_name === 'id' || field_name === 'created_at' || field_name === 'updated_at';
 }
 
-export const htmlHead = `<!DOCTYPE html>
+export const HTML_HEAD = `<!DOCTYPE html>
   <html lang="en">
   
   <head>
@@ -123,13 +126,13 @@ export const htmlHead = `<!DOCTYPE html>
           </ul>
         </nav>
       </aside>
-      <main id="main" class="container slide-it">`;
+      <main id="main" class="container slide-it">` as const;
 
-export const htmlTail = `    </main>
+export const HTML_TAIL = `    </main>
     </div>
   </body>
   
-  </html>`;
+  </html>` as const;
 
 export const CLI = {
   account: [
@@ -151,8 +154,9 @@ export const CLI = {
   schedule: ['list', 'ls', 'get', 'add', 'update', 'remove'],
   finance: ['report', 'add-query', 'update-report', 'update-query', 'remove', 'remove-query']
 } as const;
-export type Program = keyof typeof CLI;
-export type Command<T extends Program> = typeof CLI[T][number];
+export type CLI = typeof CLI;
+export type Program = keyof CLI;
+export type Command<T extends Program> = CLI[T][number];
 
 export const PrintMode = [
   'normal',
@@ -197,7 +201,7 @@ export function pretty(json: object): string {
   return decodeURIComponent(JSON.stringify(json, undefined, 4).replaceAll('\n', '<br/>').replaceAll(' ', '&nbsp;'));
 }
 
-export const isProd = Bun.env.NODE_ENV === "production";
+export const IS_PROD = Bun.env.NODE_ENV === "production" as const;
 
 export async function cli<T extends Program>(program: T, command: Command<T>, args?: ([string, string | number | undefined] | number)[] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
@@ -224,7 +228,7 @@ export async function cli<T extends Program>(program: T, command: Command<T>, ar
 
   let cmd;
   try {
-    if (isProd) {
+    if (IS_PROD) {
       cmd = await $`casual-cli -m ${print_mode} ${program} ${command} ${argsString}`;
     } else {
       cmd = await $`cargo run --quiet -- -m ${print_mode} ${program} ${command} ${argsString}`;
@@ -291,7 +295,7 @@ export function updateForm(id: string, putPath: string, fields: Record<string, s
 }
 
 
-export function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, number | [string, number] | string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
+export function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, number | [number, string] | string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
   const titleText = id.replaceAll('-', ' ');
   return `${isCollapsable ? `
       <style>
@@ -316,10 +320,10 @@ export function form(id: string, postPath: string, fieldsNames: string[], autoCo
       console.log({ name, value: autoComplete[name] });
       if (typeof autoComplete[name] === 'number' && autoComplete[name] > 0) {
         // use number as value and disable input
-        html += `<select name="${name}" id="${inputId}" readonly><option val="${autoComplete[name]}" selected>${autoComplete[name]}</select>`;
+        html += `<select name="${name}" id="${inputId}" readonly><option value="${autoComplete[name]}" selected>${autoComplete[name]}</option></select>`;
       } else if (Array.isArray(autoComplete[name]) && autoComplete[name].length === 2 && typeof autoComplete[name][1] === 'string' && typeof autoComplete[name][0] === 'number') {
         // use select
-        html += `<select name="${name}" readonly id="${inputId}"><option value='${autoComplete[name][0]}' selected>${autoComplete[name][1]}</option></select>`;
+        html += `<select name="${name}" readonly id="${inputId}"><option value="${autoComplete[name][0]}" selected>${autoComplete[name][1]}</option></select>`;
       } else if (name.endsWith('_id') && Array.isArray(autoComplete[name])) {
         // use select 
         html += `<select name="${name}" ${disabledField(name) ? 'readonly' : ''} id="${inputId}"><option value='' selected>Choose ${name}</option>
@@ -390,7 +394,7 @@ export function overview(name: string, dataHtml: string, heading: number = 1, ta
       deleteBtn.setAttribute('hx-delete', \`/${name}/\${el.dataset.id}\`);
       deleteBtn.setAttribute('hx-swap', 'innerHTML transition:true');
       deleteBtn.setAttribute('hx-target', '#${targetId}');
-      deleteBtn.setAttribute('hx-confirm', 'This will permantly delete ${singular(name)}, are you sure?');
+      deleteBtn.setAttribute('hx-confirm', 'You are about to permnently delete this ${singular(name)}, are you sure?');
       deleteBtn.innerText = '❌';
       deleteBtn.setAttribute('title', 'Delete ${singular(name)}');
       if (typeof window.htmx !== 'undefined') {
@@ -449,6 +453,4 @@ export async function parseBody(stream: ReadableStream): Promise<Map<string, str
   // console.debug({ bodyString, values });
   return values;
 }
-
-export type Route = (req: Request, path: string, pathId: number, page: ToPage) => Promise<Response>;
 
