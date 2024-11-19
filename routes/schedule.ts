@@ -4,9 +4,10 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
     let res: Response;
 
     const schedule = await cli('schedule', 'ls');
-    res = page(`
-${overview('schedule', typeof schedule === 'string' ? schedule : 'No scheduled items')}
-${form('add-schedule', '/schedule', ['date'])}`);
+    res = page(
+        overview('schedule', typeof schedule === 'string' ? schedule : 'No scheduled items'),
+        form('add-schedule', '/schedule', ['date'])
+    );
     return res;
 }
 

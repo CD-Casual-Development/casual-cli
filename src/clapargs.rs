@@ -1,4 +1,5 @@
 use clap::Args as ClapArgs;
+use chrono::NaiveDateTime;
 
 #[derive(ClapArgs, Debug)]
 pub struct AddressCreateArgs {
@@ -130,7 +131,7 @@ pub struct CompanyUpdateArgs {
     pub commerce_number: Option<String>,
     #[arg(short, long)]
     pub vat_number: Option<String>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub iban: Option<String>,
     #[arg(short, long)]
     pub phone: Option<String>,
@@ -138,7 +139,7 @@ pub struct CompanyUpdateArgs {
     pub email: Option<String>,
     #[arg(short, long)]
     pub account_id: Option<i64>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub address_id: Option<i64>,
 }
 
@@ -210,9 +211,18 @@ pub struct ContractCreateArgs {
     pub recipient_id: i64,
     #[arg(short, long)]
     pub contract_type: Option<String>,
+    #[arg(long)]
+    pub send_date: Option<NaiveDateTime>,
+    #[arg(long)]
+    pub start_date: Option<NaiveDateTime>,
+    #[arg(short, long)]
+    pub end_date: Option<NaiveDateTime>,
+    #[arg(short, long)]
+    pub auto_renew: Option<bool>,
+    pub cancel_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub invoice_period_months: Option<i64>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub monthly_rate: Option<i64>,
     #[arg(long)]
     pub contract_url: Option<String>,
@@ -226,9 +236,17 @@ pub struct ContractUpdateArgs {
     pub recipient_id: Option<i64>,
     #[arg(short, long)]
     pub contract_type: Option<String>,
+    #[arg(long)]
+    pub send_date: Option<NaiveDateTime>,
+    #[arg(long)]
+    pub start_date: Option<NaiveDateTime>,
+    #[arg(short, long)]
+    pub end_date: Option<NaiveDateTime>,
+    #[arg(short, long)]
+    pub auto_renew: Option<bool>,
     #[arg(short, long)]
     pub invoice_period_months: Option<i64>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub monthly_rate: Option<i64>,
     #[arg(long)]
     pub contract_url: Option<String>,
@@ -311,11 +329,11 @@ pub struct InvoiceCreateArgs {
     #[arg(short, long)]
     pub quote_id: Option<i64>,
     #[arg(long)]
-    pub send_date: Option<String>,
+    pub send_date: Option<NaiveDateTime>,
     #[arg(long)]
-    pub payment_due_date: Option<String>,
+    pub payment_due_date: Option<NaiveDateTime>,
     #[arg(long)]
-    pub payment_date: Option<String>,
+    pub payment_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub contract_id: Option<i64>,
     #[arg(short, long)]
@@ -349,11 +367,11 @@ pub struct InvoiceUpdateArgs {
     #[arg(short, long)]
     pub quote_id: Option<i64>,
     #[arg(long)]
-    pub send_date: Option<String>,
+    pub send_date: Option<NaiveDateTime>,
     #[arg(long)]
-    pub payment_due_date: Option<String>,
+    pub payment_due_date: Option<NaiveDateTime>,
     #[arg(long)]
-    pub payment_date: Option<String>,
+    pub payment_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub contract_id: Option<i64>,
     #[arg(short, long)]
@@ -400,11 +418,12 @@ pub struct ScheduleCreateArgs {
     pub invoice_id: Option<i64>,
     #[arg(short, long)]
     pub quote_id: Option<i64>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub query_id: Option<i64>,
     #[arg(short, long)]
-    pub date: Option<String>,
-    #[arg(short, long)]
+    pub date: Option<NaiveDateTime>,
+    /// ie. "7d", "1m", "1y"
+    #[arg(long)]
     pub interval: Option<String>,
 }
 
@@ -418,11 +437,12 @@ pub struct ScheduleUpdateArgs {
     pub invoice_id: Option<i64>,
     #[arg(short, long)]
     pub quote_id: Option<i64>,
-    #[arg(short, long)]
+    #[arg(long)]
     pub query_id: Option<i64>,
     #[arg(short, long)]
-    pub date: Option<String>,
-    #[arg(short, long)]
+    pub date: Option<NaiveDateTime>,
+    /// ie. "7d", "1m", "1y"
+    #[arg(long)]
     pub interval: Option<String>,
 }
 
@@ -433,9 +453,9 @@ pub struct FinanceReportArgs {
     #[arg(short, long)]
     pub company_id: Option<i64>,
     #[arg(short, long)]
-    pub from_date: Option<String>,
+    pub from_date: Option<NaiveDateTime>,
     #[arg(short, long)]
-    pub to_date: Option<String>,
+    pub to_date: Option<NaiveDateTime>,
 }
 
 #[derive(ClapArgs, Debug)]
@@ -445,9 +465,11 @@ pub struct FinanceReportUpdateArgs {
     #[arg(short, long)]
     pub company_id: Option<i64>,
     #[arg(short, long)]
-    pub from_date: Option<String>,
+    pub quote_id: Option<i64>,
     #[arg(short, long)]
-    pub to_date: Option<String>,
+    pub from_date: Option<NaiveDateTime>,
+    #[arg(short, long)]
+    pub to_date: Option<NaiveDateTime>,
 }
 
 #[derive(ClapArgs, Debug)]
@@ -456,7 +478,7 @@ pub struct FinanceCreateQueryArgs {
     pub account_id: Option<i64>,
     #[arg(short, long)]
     pub company_id: Option<i64>,
-    // ie. "7d", "1m", "1y" like ScheduleCreateArgs.interval
+    /// ie. "7d", "1m", "1y" like ScheduleCreateArgs.interval
     #[arg(short, long)]
     pub range: Option<String>,
 }
@@ -467,7 +489,7 @@ pub struct FinanceUpdateQueryArgs {
     pub account_id: Option<i64>,
     #[arg(short, long)]
     pub company_id: Option<i64>,
-    // ie. "7d", "1m", "1y" like ScheduleCreateArgs.interval
+    /// ie. "7d", "1m", "1y" like ScheduleCreateArgs.interval
     #[arg(short, long)]
     pub range: Option<String>,
 }

@@ -1,6 +1,6 @@
 import { $ } from 'bun';
 
-export type ToPage = (html: string) => Response;
+export type ToPage = (...html: string[]) => Response;
 
 export const map_input_type = {
   checkbox: (val: string) => val.startsWith('is_'),
@@ -13,7 +13,8 @@ export const map_input_type = {
     || val.endsWith('id')
     || val.endsWith('percentage')
     || val.startsWith('total')
-    || val.endsWith('discount'),
+    || val.endsWith('discount')
+    || val.endsWith('months'),
   password: (val: string) =>
     val.startsWith('password'),
   url: (val: string) =>
@@ -55,7 +56,6 @@ export function validateAutofill(field_name: string) {
   return 'on';
 }
 
-
 export function disabledField(field_name: string) {
   return field_name === 'id' || field_name === 'created_at' || field_name === 'updated_at';
 }
@@ -70,7 +70,7 @@ export const htmlHead = `<!DOCTYPE html>
     <!-- HTMX -->
     <script src="/js/htmx.min.js"></script>
     <!-- HyperScript -->
-    <script src="/js/hyperscript.js"></script>
+    <script src="/js/hyperscript.min.js"></script>
     <!-- PicoCss -->
     <link rel="stylesheet" href="/css/pico/pico.min.css" />
     <link rel="stylesheet" href="/css/casual-cli.css" />
@@ -104,10 +104,10 @@ export const htmlTail = `    </main>
 
 export const CLI = {
   account: [
-    'list', 'ls', 'list-companies', 'list-addresses',
-    'add', 'add-company', 'add-address',
-    'update', 'update-company', 'update-address',
-    'get', 'get-company', 'get-address',
+    'list', 'ls', 'list-companies', 'list-addresses', 'list-contracts',
+    'add', 'add-company', 'add-address', 'add-contract',
+    'update', 'update-company', 'update-address', 'update-contract',
+    'get', 'get-company', 'get-address', 'get-contract',
     'remove', 'remove-company', 'remove-address'
   ],
   project: [
@@ -150,13 +150,27 @@ function singular(name: string): string {
   return newName;
 }
 
+function plural(name: string): string {
+  let newName: string;
+
+  if (name.endsWith('y')) {
+    newName = name.slice(0, -1) + 'ies';
+  } else if (name.endsWith('s')) {
+    newName = name + 'es';
+  } else {
+    newName = name + 's';
+  }
+
+  return newName;
+}
+
 export function pretty(json: object): string {
   return decodeURIComponent(JSON.stringify(json, undefined, 4).replaceAll('\n', '<br/>').replaceAll(' ', '&nbsp;'));
 }
 
 export const isProd = Bun.env.NODE_ENV === "production";
 
-export async function cli<T extends Program>(program: T, command: Command<T>, args?: ([string, string | number] | number)[] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
+export async function cli<T extends Program>(program: T, command: Command<T>, args?: ([string, string | number | undefined] | number)[] | number, print_mode: PrintMode = 'html'): Promise<string | Record<string, any> | any[] | void> {
   // console.log({ program, command, args });
   let argsString: '' | number | { raw: string; } = '';
 
@@ -221,13 +235,13 @@ export function updateForm(id: string, putPath: string, fields: Record<string, s
   <label for="result">Result:</label><span id="result-${id}"></span>
   <form id="${id}" hx-put="${putPath}" hx-swap="innerHTML" hx-target="#result-${id}">
     ${Object.entries(fields).map(([name, value]) => {
-    const inputArgs = `id="${id}-${name}" ${disabledField(name) ? 'disabled' : ''} autofill=${validateAutofill(name)} type="${validateInputType(name)}" ${validateInputType(name) === 'number' ? 'min="0"' : ''} ${validateInputType(name) === 'datetime-local' ? `value="${value}"` : `placeholder="${typeof value === 'string' ? decodeURIComponent(value) : value}"`}  name="${name}"`;
+    const inputArgs = `id="${id}-${name}" ${disabledField(name) ? 'readonly' : ''} autofill=${validateAutofill(name)} type="${validateInputType(name)}" ${validateInputType(name) === 'number' ? 'min="0"' : ''} ${validateInputType(name) === 'datetime-local' ? `value="${value}"` : `placeholder="${typeof value === 'string' ? decodeURIComponent(value) : value}"`}  name="${name}"`;
 
     let html = `<div><label for="${id}-${name}">${name.replaceAll('_', ' ')}</label>`;
     if (autoComplete && autoComplete[name]) {
       if (name.endsWith('_id')) {
         // use select
-        html += `<select name="${name}" ${disabledField(name) ? 'disabled' : ''} id="${id}-${name}">
+        html += `<select name="${name}" ${disabledField(name) ? 'readonly' : ''} id="${id}-${name}">
             ${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}" ${value === val[0] ? 'selected' : ''}>${val[1]}</option>` : `<option>${val}</option>`).join('')}
           </select>`;
       } else {
@@ -248,7 +262,7 @@ export function updateForm(id: string, putPath: string, fields: Record<string, s
 }
 
 
-export function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
+export function form(id: string, postPath: string, fieldsNames: string[], autoComplete?: Record<string, number | [string, number] | string[] | [string | number, string][]>, isCollapsable: boolean = false): string {
   const titleText = id.replaceAll('-', ' ');
   return `${isCollapsable ? `
       <style>
@@ -268,14 +282,21 @@ export function form(id: string, postPath: string, fieldsNames: string[], autoCo
     const inputId = `${id}-${name}`;
     const inputType = validateInputType(name);
     const inputArgs = `id="${inputId}" type="${inputType}" autofill=${validateAutofill(name)} ${inputType === 'number' ? 'min="0"' : ''} placeholder="${inputType === 'text' ? `My cool ${titleText.split(' ')[1]} ${name}` : '0'}" name="${name}"`;
-    let html = `<div><label for="${inputId}">${name.replaceAll('_', ' ')}</label>`;
+    let html = `<div id="${inputId}-wrapper"><label for="${inputId}">${name.replaceAll('_', ' ')}</label>`;
     if (autoComplete && autoComplete[name]) {
-      if (name.endsWith('_id')) {
+      console.log({ name, value: autoComplete[name] });
+      if (typeof autoComplete[name] === 'number' && autoComplete[name] > 0) {
+        // use number as value and disable input
+        html += `<select name="${name}" id="${inputId}" readonly><option val="${autoComplete[name]}" selected>${autoComplete[name]}</select>`;
+      } else if (Array.isArray(autoComplete[name]) && autoComplete[name].length === 2 && typeof autoComplete[name][1] === 'string' && typeof autoComplete[name][0] === 'number') {
+        // use select
+        html += `<select name="${name}" readonly id="${inputId}"><option value='${autoComplete[name][0]}' selected>${autoComplete[name][1]}</option></select>`;
+      } else if (name.endsWith('_id') && Array.isArray(autoComplete[name])) {
         // use select 
-        html += `<select name="${name}" ${disabledField(name) ? 'disabled' : ''} id="${inputId}">
+        html += `<select name="${name}" ${disabledField(name) ? 'readonly' : ''} id="${inputId}"><option value='' selected>Choose ${name}</option>
             ${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}">${val[1]}</option>` : `<option>${val}</option>`).join('')}
           </select>`;
-      } else {
+      } else if (Array.isArray(autoComplete[name])) {
         html += `<input ${inputArgs} list="datalist-${name}" />`;
         html += `<datalist id="datalist-${name}">${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}">${val[1]}</option>` : `<option>${val}</option>`).join('')}</datalist>`;
       }
@@ -380,8 +401,8 @@ export function overview(name: string, dataHtml: string, heading: number = 1, ta
   </script>`;
 }
 
-export async function parseBody(stream: ReadableStream) {
-  const values = new Map();
+export async function parseBody(stream: ReadableStream): Promise<Map<string, string>> {
+  const values = new Map<string, string>();
   let bodyString = '';
   for await (const chunk of stream.values({ preventCancel: true })) {
     bodyString += Buffer.from(chunk).toString();
@@ -400,5 +421,5 @@ export async function parseBody(stream: ReadableStream) {
   return values;
 }
 
-export type Route = (req: Request, path: string, pathId: number, page: (html: string) => Response) => Promise<Response>;
+export type Route = (req: Request, path: string, pathId: number, page: ToPage) => Promise<Response>;
 

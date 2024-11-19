@@ -1,6 +1,6 @@
 
 import fs from 'node:fs';
-import { cli, form, htmlHead, htmlTail, isProd, overview, pretty, title, updateForm, type Route } from './bun-helpers';
+import { cli, form, htmlHead, htmlTail, isProd, overview, pretty, title, updateForm, type Route, type ToPage } from './bun-helpers';
 
 const routes = fs.readdirSync('./routes').map((file) => {
   const path = file.split('.')[0];
@@ -8,7 +8,7 @@ const routes = fs.readdirSync('./routes').map((file) => {
   return { path, route };
 }).reduce((acc, { path, route }) => {
   if (path === 'home') {
-    acc['/'] = { route };
+    acc['/'] = route;
   } else {
     acc[path] = route;
   }
@@ -33,7 +33,7 @@ Bun.serve({
       // const queryParams = url.searchParams;
       const method = req.method;
 
-      const page = (value: string) => req.headers.get('Hx-Request') ? new Response(`${value}`) : new Response(`${htmlHead}${value}${htmlTail}`, { headers: { 'Content-Type': 'text/html' } });
+      const page: ToPage = (...value: string[]) => req.headers.get('Hx-Request') ? new Response(`${value.join('')}`) : new Response(`${htmlHead}${value.join('')}${htmlTail}`, { headers: { 'Content-Type': 'text/html' } });
 
       let res: Response;
 

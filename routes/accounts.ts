@@ -8,6 +8,7 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
         if (account && typeof account === 'object' && !Array.isArray(account)) {
             const companies = await cli('account', 'list-companies', undefined, 'json');
             const addresses = await cli('account', 'list-addresses', undefined, 'json');
+            const contracts = await cli('account', 'list-contracts', [['-r', pathId]]);
             let company_id: [string | number, string][] = [];
             if (companies && Array.isArray(companies)) {
                 company_id = companies.map((company) => [company.id, company.name]);
@@ -18,8 +19,13 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
             }
 
 
-            res = page(`${title(account.name)}
-            ${updateForm('update-account', `/accounts/${account.id}`, account, { company_id, address_id }, true)}`);
+            res = page(
+                title(account.name),
+                updateForm('update-account', `/accounts/${account.id}`, account, { company_id, address_id }, true),
+                '<br/>',
+                overview('contracts', typeof contracts === 'string' ? contracts : 'No contracts found', 2, 'contract-view'),
+                form('add-contract', '/contracts', ['contract_type', 'invoice_period_months', 'monthly_rate', 'recipient_id', 'sender_id', 'contract_url'], { recipient_id: [pathId, account.name], sender_id: [1, 'You'], address_id }, true)
+            );
             return res;
         } else {
             console.error('project id not found', { pathId, account });
@@ -47,11 +53,12 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
         address_id = addresses.map((address) => [address.id, `${address.city}, ${address.street} ${address.number}${address.unit}`]);
     }
 
-    return page(`
-${overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found')}
-${form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'], { company_id, address_id }, true)}
-${overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2)}
-${form("add-company", "/companies", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id }, true)}`);
+    return page(
+        overview('accounts', typeof accounts === 'string' ? accounts : 'No accounts found'),
+        form("add-account", "/accounts", ['name', 'phone', 'email', 'company_id', 'address_id', 'company_name', 'country', 'city', 'street', 'number', 'unit', 'postalcode', 'privacy_permissions'], { company_id, address_id }, true),
+        overview('companies', typeof companies === 'string' ? companies : 'No companies found', 2),
+        form("add-company", "/companies", ['name', 'logo', 'commerce_number', 'vat_number', 'iban', 'phone', 'email', 'account_id', 'address_id', 'country', 'city', 'street', 'number', 'unit', 'postalcode'], { account_id, address_id }, true)
+    );
 }
 
 export async function POST(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {

@@ -16,19 +16,20 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
                 client_id = accounts.map((account) => [account.id, account.name]);
             }
 
-            res = page(`${title(project.title)}
-            <button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" class="quote-button outline" title="Make quote">📝</button>
-            <br/>
-            <br/>
-${updateForm('update-project', `/projects/${pathId}`, project, { client_id }, true)}
-<br/>
-${overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view')}
-${form('add-task', '/tasks/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'], undefined, true)}
-<br/>
-${overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2, 'quote-view')}
-<br/>
-${overview('invoices', typeof invoices === 'string' ? invoices.replaceAll('/usr/src/app/public', '') : 'No invoices found', 2, 'invoice-view')}
-`);
+            res = page(
+                title(project.title),
+                `<button hx-get="/make-quote/${pathId}" hx-swap="outerHTML" hx-target="this" class="quote-button outline" title="Make quote">📝</button>
+                <br/>
+                <br/>`,
+                updateForm('update-project', `/projects/${pathId}`, project, { client_id }, true),
+                '<br/>',
+                overview('tasks', typeof tasks === 'string' ? tasks : 'No tasks found', 2, 'task-view'),
+                form('add-task', '/tasks/' + pathId, ['title', 'description', 'minutes_estimated', 'minutes_spent', 'minutes_remaining', 'minutes_billed', 'minute_rate'], undefined, true),
+                '<br/>',
+                overview('quotes', typeof quotes === 'string' ? quotes.replaceAll('/usr/src/app/public', '') : 'No quotes found', 2, 'quote-view'),
+                '<br/>',
+                overview('invoices', typeof invoices === 'string' ? invoices.replaceAll('/usr/src/app/public', '') : 'No invoices found', 2, 'invoice-view')
+            );
             return res;
         } else {
             console.error('project id not found', pathId);
@@ -41,9 +42,10 @@ ${overview('invoices', typeof invoices === 'string' ? invoices.replaceAll('/usr/
     if (clients && Array.isArray(clients)) {
         client_id = clients.map((client) => [client.id, client.name]);
     }
-    res = page(`
-${overview('projects', typeof projects === 'string' ? projects : 'No projects found')}
-${form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id })}`);
+    res = page(
+        overview('projects', typeof projects === 'string' ? projects : 'No projects found'),
+        form('add-project', '/projects', ['title', 'description', 'client_id'], { client_id })
+    );
     return res;
 }
 

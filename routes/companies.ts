@@ -1,4 +1,4 @@
-import { cli, parseBody, title, updateForm, type ToPage } from "../bun-helpers";
+import { cli, overview, parseBody, title, updateForm, type ToPage } from "../bun-helpers";
 
 export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response> {
     let res: Response;
@@ -10,6 +10,7 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
     const company = await cli('account', 'get-company', pathId, 'json');
     if (company && typeof company === 'object' && !Array.isArray(company)) {
         const accounts = await cli('account', 'ls', undefined, 'json');
+        const companyAccounts = await cli('account', 'ls', [['-c', pathId]]);
         let account_id: [string | number, string][] = [];
         if (accounts && Array.isArray(accounts)) {
             account_id = accounts.map((account) => [account.id, account.name]);
@@ -20,7 +21,16 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
             address_id = addresses.map((address) => [address.id, `${address.city}, ${address.street} ${address.number}${address.unit}`]);
         }
 
-        res = page(`${title(company.name)}${updateForm('update-company', `/companies/${company.id}`, company, { account_id, address_id }, true)}`);
+
+
+        res = page(
+            title(company.name),
+            updateForm('update-company', `/companies/${company.id}`, company, { account_id, address_id }, true),
+            company.logo ? `<img src="${company.logo}" alt="logo" />` : '',
+            '<br/>',
+            overview('accounts', typeof companyAccounts === 'string' ? companyAccounts : 'No accounts found', 2, 'account-view')
+        );
+
     } else {
         console.warn('No task found', { company });
         res = new Response(`Not found, received ${company}`);
