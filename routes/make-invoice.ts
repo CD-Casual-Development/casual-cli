@@ -1,4 +1,4 @@
-import { cli } from "../bun-helpers";
+import { cli, waitTillFileCreatedAndRedirect } from "../bun-helpers";
 import fs from 'node:fs';
 
 export async function GET(req: Request, path: string, pathId: number): Promise<Response> {
@@ -11,21 +11,7 @@ export async function GET(req: Request, path: string, pathId: number): Promise<R
 
     cli('project', 'make-invoice', [['-q', pathId]], 'normal');
 
-    fs.watch(process.env.CCLI_OUTPUT_DIR || '../public/pdfs', (eventType, filename) => {
-        if (eventType === 'rename' && (filename?.includes('invoice') || filename?.includes('factuur'))) {
-            res = new Response('Done', {
-                headers: {
-                    'HX-Redirect': `/pdfs/${filename}`
-                }
-            });
-        }
-    });
-
-    let retries = 0;
-    while (!res && retries < 10) {
-        await new Promise(r => setTimeout(r, 1000));
-        retries++;
-    }
+    res = await waitTillFileCreatedAndRedirect(['invoice', 'factuur']);
 
     if (res) {
         return res;

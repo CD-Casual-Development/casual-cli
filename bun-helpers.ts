@@ -1,4 +1,33 @@
 import { $ } from 'bun';
+import fs from 'node:fs';
+
+export async function waitTillFileCreatedAndRedirect(predictedNames: string | string[], path: string = process.env.CCLI_OUTPUT_DIR || '../public/pdfs', timeoutInSeconds: number = 10): Promise<Response | undefined> {
+  let res: Response | undefined;
+
+  if (typeof predictedNames === 'string') {
+    predictedNames = [predictedNames];
+  }
+
+  const watcher = fs.watch(path, (eventType, filename) => {
+    if (eventType === 'rename' && (predictedNames.some(name => filename?.includes(name)))) {
+      res = new Response('Done', {
+        headers: {
+          'HX-Redirect': `/pdfs/${filename}`
+        }
+      });
+    }
+  });
+
+  let retries = 0;
+  while (!res && retries < timeoutInSeconds) {
+    await new Promise(r => setTimeout(r, 1000));
+    retries++;
+  }
+
+  watcher.close();
+
+  return res;
+}
 
 export type ToPage = (...html: string[]) => Response;
 

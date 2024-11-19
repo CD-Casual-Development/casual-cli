@@ -1,5 +1,5 @@
-import { cli } from "../bun-helpers";
-import fs from 'node:fs';
+import { cli, waitTillFileCreatedAndRedirect } from "../bun-helpers";
+
 
 export async function GET(req: Request, path: string, pathId?: number): Promise<Response> {
   let res: Response | undefined;
@@ -9,27 +9,12 @@ export async function GET(req: Request, path: string, pathId?: number): Promise<
     return res;
   }
 
-  // This is not working so making workaround
+  // This is not working using a workaround
   // let quote_url = await cli('project', 'make-quote', [['-p', pathId]], 'json');
   cli('project', 'make-quote', [['-p', pathId]], 'normal');
 
-
-
-  fs.watch(process.env.CCLI_OUTPUT_DIR || '../public/pdfs', (eventType, filename) => {
-    if (eventType === 'rename' && (filename?.includes('quote') || filename?.includes('offerte'))) {
-      res = new Response('Done', {
-        headers: {
-          'HX-Redirect': `/pdfs/${filename}`
-        }
-      });
-    }
-  });
-
-  let retries = 0;
-  while (!res && retries < 10) {
-    await new Promise(r => setTimeout(r, 1000));
-    retries++;
-  }
+  // Needs better way to predict the filename
+  res = await waitTillFileCreatedAndRedirect(['quote', 'offerte']);
 
   if (res) {
     return res;
@@ -40,6 +25,7 @@ export async function GET(req: Request, path: string, pathId?: number): Promise<
       'HX-Location': `{ "path": "/projects/${pathId}", "target": "#main", "swap": "innerHTML transition:true" }`,
     }
   });
+
   /*
   if (Array.isArray(quote_url)) {
     quote_url = quote_url[0] as string;
