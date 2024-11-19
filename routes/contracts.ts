@@ -18,7 +18,7 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
             return new Response('Client not found');
         }
         res = page(
-            title(contract.title),
+            title(contract.contract_type + 'Contract'),
             updateForm('update-contract', `/contracts/${pathId}`, contract, { recipient_id: [contract.recipient_id, client.name] }, true)
         );
         return res;
@@ -102,6 +102,11 @@ export async function PUT(req: Request, path: string, pathId: number): Promise<R
         ['-r', fields.get('recipient_id')],
         ['-c', fields.get('contract_type')],
         ['-i', fields.get('invoice_period_months')],
+        ['--start-date', fields.get('start_date')],
+        ['--end-date', fields.get('end_date')],
+        ['--auto-renew', fields.get('auto_renew')],
+        ['--cancel-date', fields.get('cancel_date')],
+        ['--send-date', fields.get('send_date')],
         ['--monthly-rate', fields.get('monthly_rate')],
         ['--contract-url', fields.get('contract_url')],
     ], 'value');

@@ -171,7 +171,7 @@ impl ToHtml for Contract {
                 "Active".to_string()
             }
         } else {
-            "Active".to_string()
+            "Unknown".to_string()
         };
 
         return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\" data-sender-id=\"{sender_id}\">Contract status: {status}</span>");

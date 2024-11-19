@@ -275,7 +275,7 @@ export function updateForm(id: string, putPath: string, fields: Record<string, s
       if (name.endsWith('_id')) {
         // use select
         html += `<select name="${name}" ${disabledField(name) ? 'readonly' : ''} id="${id}-${name}">
-            ${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}" ${value === val[0] ? 'selected' : ''}>${val[1]}</option>` : `<option>${val}</option>`).join('')}
+            ${autoComplete[name].map((val) => Array.isArray(val) ? `<option value="${val[0]}" ${value === val[0] ? 'selected' : ''}>${val[1]}</option>` : `<option ${val === value ? 'selected' : ''}>${val}</option>`).join('')}
           </select>`;
       } else {
         // use datalist
