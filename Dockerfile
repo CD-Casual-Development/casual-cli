@@ -69,9 +69,10 @@ COPY .env casual.sqlite /usr/local/bin/release/
 
 # Copy the Bun project files
 RUN ln -s /usr/local/bin/release/casual.sqlite /usr/src/app/casual.sqlite;
-COPY index.html index.ts bun.js package.json bun.lockb tsconfig.json .env ./
+COPY index.ts bun.js package.json bun.lockb tsconfig.json bun-helpers.ts .env ./
 COPY public ./public
 COPY templates /root/.ccli/templates
+COPY routes ./routes
 
 # Upgrade Bun
 RUN bun upgrade;
