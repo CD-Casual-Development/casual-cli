@@ -19,7 +19,7 @@ export async function GET(req: Request, path: string, pathId?: number): Promise<
     if (eventType === 'rename' && (filename?.includes('quote') || filename?.includes('offerte'))) {
       res = new Response('Done', {
         headers: {
-          'HX-Redirect': `/public/pdfs/${filename}`
+          'HX-Redirect': `/pdfs/${filename}`
         }
       });
     }

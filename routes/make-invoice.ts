@@ -15,7 +15,7 @@ export async function GET(req: Request, path: string, pathId: number): Promise<R
         if (eventType === 'rename' && (filename?.includes('invoice') || filename?.includes('factuur'))) {
             res = new Response('Done', {
                 headers: {
-                    'HX-Redirect': `/public/pdfs/${filename}`
+                    'HX-Redirect': `/pdfs/${filename}`
                 }
             });
         }
