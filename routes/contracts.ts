@@ -10,13 +10,16 @@ export async function GET(req: Request, path: string, pathId: number, page: ToPa
     const contract = await cli('account', 'get-contract', pathId, 'json');
 
     if (contract && typeof contract === 'object' && !Array.isArray(contract)) {
-        const client = await cli('account', 'get', contract.client_id, 'json');
+        if (!contract.recipient_id) {
+            return new Response(`Client not found id:${contract.recipient_id}`);
+        }
+        const client = await cli('account', 'get', contract.recipient_id, 'json');
         if (!client || typeof client !== 'object' || Array.isArray(client)) {
             return new Response('Client not found');
         }
         res = page(
             title(contract.title),
-            updateForm('update-contract', `/contracts/${pathId}`, contract, { client_id: [contract.client_id, client.name] }, true)
+            updateForm('update-contract', `/contracts/${pathId}`, contract, { recipient_id: [contract.recipient_id, client.name] }, true)
         );
         return res;
     }
