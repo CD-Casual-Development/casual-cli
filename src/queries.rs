@@ -1317,15 +1317,13 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
         sender_id,
         recipient_id: project.client_id,
         invoice_number: format!("{}{:05}", chrono::Utc::now().year(), project.id),
-        send_date: Some(format!("{}", chrono::Utc::now().format("%d-%m-%Y"))),
+        send_date: Some(chrono::Utc::now().naive_local()),
         quote_id: invoice_args.quote_id,
-        payment_due_date: Some(format!(
-            "{}",
+        payment_due_date: Some(
             chrono::Utc::now()
                 .checked_add_months(Months::new(1))
                 .unwrap()
-                .format("%d-%m-%Y")
-        )),
+                .naive_local()),
         payment_date: None,
         contract_id: invoice_args.contract_id,
         project_id,
@@ -1518,7 +1516,10 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
             send_date: chrono::Local::now().format("%d-%m-%Y").to_string(),
             contract_type: contract.contract_type.clone().unwrap_or("".to_string()),
             invoice_number: invoice.invoice_number.clone(),
-            due_date: invoice.payment_due_date.clone().unwrap_or("".to_string()),
+            due_date: match invoice.payment_due_date {
+                Some(date) => date.format("%d-%m-%Y").to_string(),
+                None => "".to_string(),
+            },
             invoice_table,
             remarks: invoice.remarks.clone().unwrap_or("".to_string()),
             currency_symbol: match invoice
@@ -1602,7 +1603,10 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
             send_date: chrono::Local::now().format("%d-%m-%Y").to_string(),
             project_title: project.title.clone(),
             invoice_number: invoice.invoice_number.clone(),
-            due_date: invoice.payment_due_date.clone().unwrap_or("".to_string()),
+            due_date: match invoice.payment_due_date {
+                Some(date) => date.format("%d-%m-%Y").to_string(),
+                None => "".to_string(),
+            },
             project_tasks: invoice_table,
             remarks: invoice.remarks.clone().unwrap_or("".to_string()),
             currency_symbol: match invoice
@@ -1636,12 +1640,7 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
 
         generate_pdf(&pdf_args).await?
     };
-
-    let payment_due_date = chrono::NaiveDateTime::parse_from_str(
-        invoice.payment_due_date.as_ref().unwrap(),
-        "%d-%m-%Y",
-    ).unwrap_or(chrono::Local::now().naive_local());
-
+    
     let result = sqlx::query!(
         r#"
 INSERT INTO invoices (
@@ -1667,7 +1666,7 @@ INSERT INTO invoices (
         invoice.recipient_id,
         invoice.invoice_number,
         invoice.quote_id,
-        payment_due_date,
+        invoice.payment_due_date,
         invoice.payment_date,
         invoice.contract_id,
         invoice.project_id,
