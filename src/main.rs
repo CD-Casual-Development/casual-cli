@@ -206,7 +206,7 @@ impl ToHtml for Quote {
             .ok_or("#not-found")
             .expect("Unable to get quote_url");
 
-        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\"{}>Quote: <a href=\"{quote_url}\" target=\"_blank\">{quote_url}</a></span>");
+        return format!("<span data-id=\"{id}\" data-recipient-id=\"{recipient_id}\">Quote: <a href=\"{quote_url}\" target=\"_blank\">{quote_url}</a></span>");
     }
 }
 
@@ -248,11 +248,11 @@ impl ToHtml for FinanceReport {
         let from_date = match self.from_date {
             Some(d) => format!("{}", d.format("%d-%m-%Y")),
             None => "never".to_string(),
-        }
+        };
         let to_date = match self.to_date {
             Some(d) => format!("{}", d.format("%d-%m-%Y")),
             None => "never".to_string(),
-        }
+        };
 
         return format!("<span data-id=\"{id}\"{}{}{}>Report: {from_date} to {to_date}</span>",
             self.account_id.map_or("".to_string(), |x| format!(" data-account-id=\"{}\"", x)),
