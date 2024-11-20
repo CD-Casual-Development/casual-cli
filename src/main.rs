@@ -99,6 +99,54 @@ impl ToHtml for &i64 {
     }
 }
 
+impl ToHtml for i32 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for &i32 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for f64 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for &f64 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for bool {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for &bool {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for u64 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
+impl ToHtml for &u64 {
+    fn to_html(&self) -> String {
+        return format!("<span>{}</span>", self);
+    }
+}
+
 impl ToHtml for Jchar {
     fn to_html(&self) -> String {
         return format!("<span>{:?}</span>", self);
@@ -1236,7 +1284,7 @@ async fn main() -> Result<()> {
             Some(FinanceCommands::AddQuery { query }) => {
                 log.msg(format!("Adding query {:?}", query));
                 let id = add_query(&db_pool, query).await?;
-                //log.print("Query added with id".to_string(), id, true);
+                log.print("Query added with id".to_string(), id, true);
             }
             Some(FinanceCommands::UpdateQuery { id, query }) => {
                 log.msg(format!("Updating query {}", id));
