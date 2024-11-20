@@ -1,11 +1,11 @@
 use email_format::Email;
 
 pub trait EmailToFile {
-    fn write_to_file(&self, filename: &str) -> std::io::Result<()>;
+    fn write_to_file(&self, filename: &str) -> anyhow::Result<()>;
 }
 
 impl EmailToFile for Email {
-    fn write_to_file(&self, filename: &str) -> std::io::Result<()> {
+    fn write_to_file(&self, filename: &str) -> anyhow::Result<()> {
         use std::fs::File;
         use std::io::Write;
 

@@ -62,6 +62,7 @@ COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-gnu/release /usr/lo
 
 # Create a symlink to the casual-cli binary
 RUN ln -s /usr/local/bin/release/casual-cli /usr/local/bin/casual-cli;
+RUN ln -s /usr/local/bin/release/mailer /usr/local/bin/mailer;
 
 # Create a symlink to Bun
 RUN ln -s /root/.bun/bin/bun /usr/local/bin/bun;
