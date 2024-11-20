@@ -449,7 +449,9 @@ impl Logger {
                         serde_json::to_string(&value).expect("Couldn't serialize value to json")
                     );
                 } else {
-                    if type_name_of_val(&value) == "casual_cli::Jchar" {
+                    // Careful with this one, it will print the json string without quotes
+                    // The type_name_of_val function lists the whole crate path of the type making it hard to maintain
+                    if type_name_of_val(&value) == "casual_cli_lib::commands::Jchar" {
                         print!("{:?}", value);
                     } else {
                         print!(
