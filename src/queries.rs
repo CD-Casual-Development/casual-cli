@@ -806,6 +806,8 @@ macro_rules! get_env_or_home_dir {
 }
 
 impl PdfData<'_> {
+    // Clippy lint is disabled because the match arms are exhaustive
+    #[allow(dead_code)]
     fn get_template_name(&self) -> String {
         match self {
             PdfData::Quote(_) => "quote".to_string(),
