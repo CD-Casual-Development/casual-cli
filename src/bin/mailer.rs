@@ -5,304 +5,294 @@ extern crate serde_json;
 extern crate sqlx;
 
 use casual_cli_lib::email::*;
-use casual_cli_lib::models::Contract;
-use email_format::rfc5322::Parsable;
-use serde::{Deserialize, Serialize};
+use casual_cli_lib::models::{Account, Contract, Schedule};
+use chrono::{Datelike, NaiveDateTime, Timelike};
+use lettre::Transport;
 
-use std::{env, fs};
+use std::io::Read;
 use std::thread::sleep;
 use std::time::Duration;
+use std::{env, fs};
 
-use sqlx::SqlitePool;
-use anyhow::Result;
-use email_format::Email;
-use mailstrom::Mailstrom;
+use anyhow::{anyhow, Ok, Result};
 use mailstrom::config::Config;
-use mailstrom::storage::{InternalMessageStatus, MailstromStorage, MailstromStorageError, PreparedEmail};
+use mailstrom::Mailstrom;
+use sqlx::SqlitePool;
 
-// extends InternalMessageStatus to include a boolean for whether the message has been retrieved
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct MessageStatus {
-    internal_message_status: InternalMessageStatus,
-    retrieved: bool,
-}
+const SLEEP_TIME_MINUTES: u64 = 5;
+const SLEEP_TIME_SECONDS: u64 = 60 * SLEEP_TIME_MINUTES;
 
-impl Into<InternalMessageStatus> for MessageStatus {
-    fn into(self) -> InternalMessageStatus {
-        self.internal_message_status.clone()
+fn add_months(date: NaiveDateTime, months: u32) -> Result<NaiveDateTime> {
+    let year = date.year();
+    let month = date.month();
+    let day = date.day();
+    let hour = date.hour();
+    let minute = date.minute();
+    let second = date.second();
+    let subsec_nanos = date.nanosecond();
+    let mut new_month = month + months;
+    let mut new_year = year;
+    let mut new_day = day;
+    while new_month > 12 {
+        new_month -= 12;
+        new_year += 1;
     }
-}
-
-impl From<InternalMessageStatus> for MessageStatus {
-    fn from(status: InternalMessageStatus) -> Self {
-        MessageStatus {
-            internal_message_status: status,
-            retrieved: false,
+    while new_month < 1 {
+        new_month += 12;
+        new_year -= 1;
+    }
+    if day > 28 {
+        while new_day > 28 {
+            new_day -= 1;
+            if new_day == 0 {
+                new_day = 28;
+                break;
+            }
         }
     }
+
+    Ok(NaiveDateTime::new(
+        chrono::NaiveDate::from_ymd_opt(new_year, new_month, new_day).ok_or(anyhow!(
+            "Error: add_months couldn't make new date {new_year}-{new_month}-{new_day}"
+        ))?,
+        chrono::NaiveTime::from_hms_nano_opt(hour, minute, second, subsec_nanos).ok_or(anyhow!(
+            "Error: add_months couldn't make new date T {hour}:{minute}:{second}:{subsec_nanos}"
+        ))?,
+    ))
 }
 
+async fn auto_schedule_contracts(db_pool: &SqlitePool) -> Result<()> {
+    let contracts = sqlx::query_as!(Contract, "SELECT * FROM contracts")
+        .fetch_all(db_pool)
+        .await?;
 
-pub trait EmailToFile2 {
-    fn write_to_file(&self, filename: &str) -> anyhow::Result<()>;
-}
+    println!("Contracts: {:?}", contracts);
 
-pub trait EmailFromString2 {
-    fn from_string(s: &str) -> anyhow::Result<PreparedEmail>;
-}
+    for contract in contracts {
+        println!("Auto-renew: {:?}", contract.auto_renew);
+        if contract.auto_renew.unwrap_or(false) {
+            println!("Processing contract: {:?}", contract);
+            let sender = sqlx::query_as!(
+                Account,
+                "SELECT * FROM accounts WHERE id = ?",
+                contract.sender_id
+            )
+            .fetch_one(db_pool)
+            .await?;
+            let recipient = sqlx::query_as!(
+                Account,
+                "SELECT * FROM accounts WHERE id = ?",
+                contract.recipient_id
+            )
+            .fetch_one(db_pool)
+            .await?;
+            let invoice_peroid_months = contract.invoice_period_months.unwrap_or(1);
+            let start_date = contract
+                .start_date
+                .unwrap_or(chrono::Local::now().naive_local());
+            let end_date = contract.end_date.unwrap_or(add_months(
+                start_date,
+                invoice_peroid_months.try_into().unwrap(),
+            )?);
+            let sender_email = sender
+                .email
+                .unwrap_or("kenrick@casualdevelopment.nl".to_string());
+            let sender_name = sender.name.unwrap_or("Casual Development".to_string());
+            let recipient_email = recipient
+                .email
+                .expect("Recipient must have an email address");
+            let recipient_name = recipient.name.unwrap_or("Client".to_string());
+            let end_date_string = end_date.format("%Y-%m-%d").to_string();
 
-struct FileStorage {}
+            if end_date < chrono::Local::now().naive_local() + chrono::Duration::days(2) {
+                let mut email = email_format::Email::new(
+                    sender_email.as_str(),
+                    chrono::Local::now()
+                        .format("%a, %d %b %Y %H:%M:%S %z")
+                        .to_string()
+                        .as_str(),
+                )
+                .unwrap();
 
-impl FileStorage {
-    fn new() -> FileStorage {
-        FileStorage {}
-    }
-}
-
-#[derive(Debug)]
-enum FileStorageError {
-    IoError(std::io::Error),
-    AnyhowError(anyhow::Error),
-    SerdeJsonError(serde_json::Error),
-
-}
-impl std::fmt::Display for FileStorageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FileStorageError::IoError(e) => write!(f, "IO Error: {}", e),
-            FileStorageError::AnyhowError(e) => write!(f, "Anyhow Error: {}", e),
-            FileStorageError::SerdeJsonError(e) => write!(f, "Serde JSON Error: {}", e),
+                email.set_sender(sender_email.as_str()).unwrap();
+                email
+                    .set_reply_to("CD Mailer <no-reply@casualdevelopment.nl>")
+                    .unwrap();
+                email
+                    .set_to(format!("{} <{}>", recipient_name, recipient_email).as_str())
+                    .unwrap();
+                email.set_subject("Contract Renewal").unwrap();
+                email.set_body(format!("Hello {},\r\n\
+                \r\n\
+                This is a friendly reminder that your contract with {} is set to expire on {}.\r\n\
+                \r\n\
+                If you would like to renew your contract, please contact us at your earliest convenience.\r\n\
+                \r\n\
+                Best regards,\r\n\
+                Casual Development", recipient_name, sender_name, end_date_string).as_str()).unwrap();
+                
+                email
+                    .write_to_file(
+                        format!("contract-renewal-{}.eml", recipient_name).as_str(),
+                        Some(end_date_string.as_str()),
+                    )
+                    .unwrap();
+                let new_end_date = add_months(end_date, invoice_peroid_months.try_into().unwrap())?;
+                sqlx::query!(
+                    "UPDATE contracts SET end_date = ? WHERE id = ?",
+                    new_end_date,
+                    contract.id
+                )
+                .execute(db_pool)
+                .await?;
+            }
         }
     }
+    Ok(())
 }
 
-impl std::error::Error for FileStorageError {}
+async fn auto_schedule_schedule(db_pool: &SqlitePool) -> Result<()> {
+    let schedule_items = sqlx::query_as!(Schedule, "SELECT * FROM schedule")
+        .fetch_all(db_pool)
+        .await?;
 
-impl MailstromStorageError for FileStorageError {}
-
-impl EmailToFile2 for PreparedEmail {
-    fn write_to_file(&self, filename: &str) -> Result<()> {
-        use std::fs::write;
-        Ok(write(filename, self.as_sendable_email()?.message_to_string()?.as_bytes())?)
-    }
+    println!("Schedule items: {:?}", schedule_items);
+    Ok(())
 }
 
-impl EmailFromString2 for PreparedEmail {
-    fn from_string(s: &str) -> Result<PreparedEmail> {
-        let (email, _remainder) = Email::parse(s.as_bytes())?;
-
-        Ok(PreparedEmail {
-            to: email.get_to().iter().map(|a| a.to_string()).collect(),
-            from: email.get_from().0.to_string(),
-            message_id: email.get_message_id().unwrap().to_string(),
-            message: email.to_string().as_bytes().to_vec(),
-        })
+async fn process_scheduled_emails() -> Result<Vec<email_format::Email>> {
+    let mut emails = vec![];
+    let path_name = format!(
+        "./mails/schedule/{}",
+        chrono::Local::now()
+            .naive_local()
+            .format("%Y-%m-%d")
+            .to_string()
+    );
+    let path = std::path::Path::new(path_name.as_str());
+    if !path.exists() || !path.is_dir() {
+        println!("No emails to send today.");
+        return Ok(emails);
     }
-}
-
-impl MailstromStorage for FileStorage {
-    type Error = FileStorageError;
-    /// Store a `PreparedEmail`.  This should overwrite if message-id matches an existing
-    /// email.
-    fn store(
-        &mut self,
-        email: PreparedEmail,
-        internal_message_status: InternalMessageStatus,
-    ) -> Result<(), Self::Error> {
-        let status = MessageStatus {
-            internal_message_status: internal_message_status.clone(),
-            retrieved: false,
-        };
-
-        fs::create_dir_all("./mails/storage").map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        email.write_to_file(format!("./mails/storage/{}.eml", &internal_message_status.message_id).as_str()).map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        serde_json::to_string(&status).map_err(|e| FileStorageError::SerdeJsonError(e)).and_then(|s| {
-            fs::write(format!("./mails/storage/{}.json", &internal_message_status.message_id), s).map_err(|e| FileStorageError::IoError(e))
-        })
-    }
-
-    /// Update the status of an email
-    fn update_status(
-        &mut self,
-        internal_message_status: InternalMessageStatus,
-    ) -> Result<(), Self::Error> {
-        let status = MessageStatus {
-            internal_message_status: internal_message_status.clone(),
-            retrieved: false,
-        };
-        serde_json::to_string(&status).map_err(|e| FileStorageError::SerdeJsonError(e)).and_then(|s| {
-            fs::write(format!("./mails/storage/{}.json", &internal_message_status.message_id), s).map_err(|e| FileStorageError::IoError(e))
-        })
-    }
-
-    /// Retrieve a `PreparedEmail` and `InternalMessageStatus` based on the message_id
-    fn retrieve(
-        &self,
-        message_id: &str,
-    ) -> Result<(PreparedEmail, InternalMessageStatus), Self::Error> {
-        let email = PreparedEmail::from_string(&fs::read_to_string(format!("./mails/storage/{}.eml", message_id)).map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?).map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        let status: MessageStatus = serde_json::from_str(&fs::read_to_string(format!("./mails/storage/{}.json", message_id)).map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?).map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        Ok((email, status.internal_message_status))
-    }
-
-    /// Retrieve an `InternalMessageStatus` based on the message_id
-    fn retrieve_status(&self, message_id: &str) -> Result<InternalMessageStatus, Self::Error> {
-        let status: MessageStatus = serde_json::from_str(
-            &fs::read_to_string(format!("./mails/storage/{}.json", message_id))
-                .map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?)
-                .map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        Ok(status.internal_message_status)
-    }
-
-    /// Retrieve all incomplete emails (status only). This is used to continue retrying
-    /// after shutdown and later startup.
-    fn retrieve_all_incomplete(&self) -> Result<Vec<InternalMessageStatus>, Self::Error> { 
-        fs::create_dir_all("./mails/storage").map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?;
-        Ok(fs::read_dir("./mails/storage").map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!(e)))?.filter_map(|entry| {
-            let entry = entry.map_err(|e| FileStorageError::IoError(e)).unwrap();
+    fs::read_dir(path)?
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
             let path = entry.path();
             if path.is_file() {
-                let status: Result<MessageStatus, FileStorageError> = serde_json::from_str(&fs::read_to_string(path).map_err(|e| FileStorageError::IoError(e)).unwrap()).map_err(|e| FileStorageError::SerdeJsonError(e));
-                if let Ok(status) = status {
-                    if !status.internal_message_status.as_message_status().completed() {
-                        Some(status.internal_message_status)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                Some(path)
             } else {
                 None
             }
-        }).collect())
-    }
+        })
+        .for_each(|path| {
+            println!("Processing email: {:?}", path);
+            let email = email_format::Email::from_file(path.to_str().unwrap()).unwrap();
+            emails.push(email);
+            fs::remove_file(path).unwrap();
+        });
 
-    /// Retrieve all incomplete emails as well as all complete emails that have become
-    /// complete since the last time this function was called. This can be implemented
-    /// by storing a retrieved boolean as falswe when update_status saves as complete,
-    /// and setting that boolean to true when this function is run.
-    fn retrieve_all_recent(&mut self) -> Result<Vec<InternalMessageStatus>, Self::Error> {
-        Ok(fs::read_dir("./mails/storage")
-            .map_err(|e| FileStorageError::AnyhowError(anyhow::anyhow!("Error retrieve_all_recent: {}", e)))?
-            .filter_map(|entry| {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.is_file() {
-                let mut status: MessageStatus = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
-                if !status.internal_message_status.as_message_status().completed() || !status.retrieved {
-                    if status.internal_message_status.as_message_status().completed() {
-                        status.retrieved = true;
-                        fs::write(path, serde_json::to_string(&status).unwrap()).unwrap();
-                    }
-                    Some(status.internal_message_status.clone())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }).collect())
-    }
+    Ok(emails)
 }
-
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
-    dotenv::dotenv().ok();
+    while !should_quit_daemon {
+        dotenv::dotenv().ok();
 
-    let db_pool = SqlitePool::connect(&env::var("DATABASE_URL")?).await?;
-    sqlx::migrate!().run(&db_pool).await?;
+        let db_pool = SqlitePool::connect(&env::var("DATABASE_URL")?).await?;
+        sqlx::migrate!().run(&db_pool).await?;
 
-    let _contracts = sqlx::query_as!(Contract, "SELECT * FROM contracts")
-        .fetch_all(&db_pool)
-        .await?
-        .iter()
-        .for_each(|contract| {
-            println!("{:?}", contract);
-        });
+        auto_schedule_contracts(&db_pool).await?;
+        auto_schedule_schedule(&db_pool).await?;
 
-    let mut email = Email::new(
-        "kenrick@casualdevelopment.nl",  // "From:"
-        chrono::Local::now().format("%a, %d %b %Y %H:%M:%S %z").to_string().as_str() // "Date: Wed, 05 Jan 2015 15:13:05 +1300"
-    ).unwrap();
+        let emails: Vec<Email> = process_scheduled_emails().await?;
 
-    // email.set_bcc("myself@mydomain.com").unwrap();
-    email.set_sender("kenrick@casualdevelopment.nl").unwrap();
-    email.set_reply_to("CD Mailer <no-reply@casualdevelopment.nl>").unwrap();
-    email.set_to("Kenrick Hotmail <kenrick_half8@hotmail.com>, Kenrick Gmail <kenrickhalff@hotmail.com>, Kenrick CD <kenrick@casualdevelopment.nl>").unwrap();
-    // email.set_cc("Our Friend <friend@frienddomain.com>").unwrap();
-    email.set_subject("Hello Friend").unwrap();
-    email.set_body("Good to hear from you.\r\n\
-                    I wish you the best.\r\n\
-                    \r\n\
-                    Your Friend").unwrap();
+        let mut mailstrom = Mailstrom::new(
+            Config {
+                helo_name: "casualdevelopment.nl".to_owned(),
+                ..Default::default()
+            },
+            FileStorage::new(),
+        );
 
-    // Write email to a file
-    email.write_to_file("email.eml").unwrap();
+        // We must explicitly tell mailstrom to start actually sending emails.  If we
+        // were only interested in reading the status of previously sent emails, we
+        // would not send this command.
+        mailstrom.start().unwrap();
 
-    email = Email::from_file("email.eml").unwrap();
-    
-    let mut mailstrom = Mailstrom::new(
-        Config {
-            helo_name: "casualdevelopment.nl".to_owned(),
-            ..Default::default()
-        },
-        FileStorage::new());
+        let mut message_ids = Vec::<String>::with_capacity(emails.len());
+        for email in emails {
+            message_ids.push(mailstrom.send_email(email).unwrap());
+        }
 
-    // We must explicitly tell mailstrom to start actually sending emails.  If we
-    // were only interested in reading the status of previously sent emails, we
-    // would not send this command.
-    mailstrom.start().unwrap();
-    
-    let message_id = mailstrom.send_email(email).unwrap();
-    let mut should_quit = false;
-    let mut success = false;
-    let mut amount_delivered = 0;
-    let mut amount_failed = 0;
-    let mut amount_deferred = 0;
-    let mut amount_sent = 0;
+        let mut should_quit = false;
+        let mut success = false;
+        let mut amount_delivered = 0;
+        let mut amount_failed = 0;
+        let mut amount_deferred = 0;
+        let mut amount_sent = 0;
 
-    // Later on, after the worker thread has had time to process the request,
-    // you can check the status:
-    while !should_quit {
-        let status = mailstrom.query_status(&*message_id)?;
-        amount_sent = status.recipient_status.len();
-        println!("{:?} {:?}", mailstrom.worker_status(), status);
+        // Later on, after the worker thread has had time to process the request,
+        // you can check the status:
+        while !should_quit {
+            amount_delivered = 0;
+            amount_failed = 0;
+            amount_deferred = 0;
+            amount_sent = 0;
+            let mut completed: Vec<bool> = vec![];
+            let mut succeeded: Vec<bool> = vec![];
+            for message_id in &message_ids {
+                let status = mailstrom.query_status(&*message_id)?;
+                amount_sent += status.recipient_status.len();
+                println!("{:?} {:?}", mailstrom.worker_status(), status);
 
-        if status.completed() {
-            should_quit = true;
-            if status.succeeded() {
-                success = true;
+                if status.completed() {
+                    completed.push(true);
+                    if status.succeeded() {
+                        succeeded.push(true);
+                    } else {
+                        succeeded.push(false);
+                    }
+                }
+
+                status.recipient_status.iter().for_each(|r| match r.result {
+                    mailstrom::DeliveryResult::Delivered(_) => amount_delivered += 1,
+                    mailstrom::DeliveryResult::Failed(_) => amount_failed += 1,
+                    mailstrom::DeliveryResult::Deferred(_, _) => amount_deferred += 1,
+                    _ => {}
+                });
+            }
+
+            if completed.len() == message_ids.len() {
+                if succeeded.iter().all(|&x| x) {
+                    success = true;
+                }
+                should_quit = true;
+            }
+
+            if amount_sent <= amount_delivered + amount_failed + amount_deferred {
+                should_quit = true;
+            }
+
+            if !should_quit {
+                sleep(Duration::from_secs(5));
             }
         }
 
-        amount_delivered = 0;
-        amount_failed = 0;
-        amount_deferred = 0;
-        status.recipient_status.iter().for_each(|r| {
-            match r.result {
-                mailstrom::DeliveryResult::Delivered(_) => amount_delivered += 1,
-                mailstrom::DeliveryResult::Failed(_) => amount_failed += 1,
-                mailstrom::DeliveryResult::Deferred(_, _) => amount_deferred += 1,
-                _ => {}
-            }
-        });
-
-        if amount_sent <= amount_delivered + amount_failed + amount_deferred {
-            should_quit = true;
+        if success {
+            println!(
+                "Emails ({}) sent successfully! {} delivered, {} failed, {} deferred",
+                amount_sent, amount_delivered, amount_failed, amount_deferred
+            );
+        } else {
+            println!(
+                "Failed sending some or all emails ({}). {} delivered, {} failed, {} deferred.",
+                amount_sent, amount_delivered, amount_failed, amount_deferred
+            );
         }
+        println!("Sleeping for {} minutes...", SLEEP_TIME_MINUTES);
 
-        if !should_quit {
-            sleep(Duration::from_secs(5));
-        }
+        sleep(Duration::from_secs(SLEEP_TIME_SECONDS));
     }
-
-    if success {
-        println!("Emails ({}) sent successfully! {} delivered, {} failed, {} deferred", amount_sent, amount_delivered, amount_failed, amount_deferred);
-    } else {
-        println!("Failed sending some or all emails ({}). {} delivered, {} failed, {} deferred.", amount_sent, amount_delivered, amount_failed, amount_deferred);
-    }
-
     Ok(())
 }

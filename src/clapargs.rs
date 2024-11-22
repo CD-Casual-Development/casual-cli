@@ -219,6 +219,7 @@ pub struct ContractCreateArgs {
     pub end_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub auto_renew: Option<bool>,
+    #[arg(long)]
     pub cancel_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub invoice_period_months: Option<i64>,
@@ -242,6 +243,8 @@ pub struct ContractUpdateArgs {
     pub start_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub end_date: Option<NaiveDateTime>,
+    #[arg(long)]
+    pub cancel_date: Option<NaiveDateTime>,
     #[arg(short, long)]
     pub auto_renew: Option<bool>,
     #[arg(short, long)]

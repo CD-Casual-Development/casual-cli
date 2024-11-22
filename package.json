@@ -9,6 +9,8 @@
     "build:prod": "cargo build --release",
     "build:dev": "cargo build",
     "build:docker": "docker build -t casual-cli .",
+    "run:mailer": "cargo run --bin mailer",
+    "debug:mailer": "RUST_BACKTRACE=full cargo run --bin mailer",
     "run:docker": "docker run -p 8080:3000 -it  casual-cli"
   },
   "devDependencies": {

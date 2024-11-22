@@ -1,5 +1,26 @@
 import { type ToPage, cli, overview, form, updateForm, title, parseBody } from "../bun-helpers";
 
+
+function decodeDateField(field: string, fields: Map<string, string>): string | undefined {
+    if (fields.has(`${field}_date`) && fields.get(`${field}_date`)) {
+        if (fields.get(`${field}_date`) === 'null') {
+            fields.delete(`${field}_date`);
+            return undefined;
+        }
+
+        let date = decodeURIComponent(fields.get(`${field}_date`)!);
+        console.log({ date }, date.split(':').length);
+        if (date.split(':').length === 2) {
+            fields.set(`${field}_date`, date + ':00');
+        } else if (date.split(':').length === 1) {
+            fields.set(`${field}_date`, date + ':00:00');
+        } else {
+            fields.set(`${field}_date`, date);
+        }
+    }
+    return fields.get(`${field}_date`);
+}
+
 export async function GET(req: Request, path: string, pathId: number, page: ToPage): Promise<Response | undefined> {
     let res: Response;
 
@@ -96,17 +117,19 @@ export async function PUT(req: Request, path: string, pathId: number): Promise<R
 
     const fields = await parseBody(req.body);
 
+    const getDateField = (field: string) => decodeDateField(field, fields);
+
     const id = await cli('account', 'update-contract', [
         pathId,
         ['-s', fields.get('sender_id')],
         ['-r', fields.get('recipient_id')],
         ['-c', fields.get('contract_type')],
         ['-i', fields.get('invoice_period_months')],
-        ['--start-date', fields.get('start_date')],
-        ['--end-date', fields.get('end_date')],
+        ['--start-date', getDateField('start')],
+        ['--end-date', getDateField('end')],
         ['--auto-renew', fields.get('auto_renew')],
-        ['--cancel-date', fields.get('cancel_date')],
-        ['--send-date', fields.get('send_date')],
+        ['--cancel-date', getDateField('cancel')],
+        ['--send-date', getDateField('send')],
         ['--monthly-rate', fields.get('monthly_rate')],
         ['--contract-url', fields.get('contract_url')],
     ], 'value');
