@@ -34,8 +34,8 @@
       <span>%%sender_name%%</span>
       <br />
       <br />
-      <h3>Project</h3>
-      <span>%%project_title%%</span>
+      <h3>Dienst</h3>
+      <span>%%contract_type%%</span>
     </div>
     <div class="col">
       <h3>Factuurnr.</h3>
@@ -48,10 +48,10 @@
     <div class="col"></div>
   </div>
   <div class="divider"></div>
-  <inject-table items="project_tasks" class="tasks-table">
+  <inject-table items="invoice_table" class="tasks-table">
     <inject-column prop="description" class="black" label="Beschrijving" />
-    <inject-column prop="hours_spent" class="align-right" label="Aantal uur" />
-    <inject-column prop="hourly_rate" class="align-right" label="Uurprijs" />
+    <inject-column prop="months" class="align-right" label="Aantal maanden" />
+    <inject-column prop="monthly_rate" class="align-right" label="Maandprijs" />
     <inject-column prop="total" class="align-right" label="Totaalbedrag" />
   </inject-table>
   <hr />

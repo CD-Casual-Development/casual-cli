@@ -1257,203 +1257,50 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
     let mut vat_percentage = 21;
     let mut discount = invoice_args.discount.unwrap_or(0);
     let mut currency = "EUR".to_string();
-    let mut project_id: Option<i64> = None;
+    let invoice: InvoiceCreateArgs;
 
-    if invoice_args.quote_id.is_some() && invoice_args.project_id.is_some() {
-        return Err(anyhow::anyhow!(
-            "Cannot make invoice from quote and project"
-        ));
+    match (invoice_args.quote_id, invoice_args.project_id, invoice_args.contract_id) {
+        (Some(_), None, None)
+        | (None, Some(_), None)
+        | (None, None, Some(_)) => {}
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Cannot make invoice from quote, project and contract. Choose one."
+            ));
+        } 
     }
 
-    if invoice_args.quote_id.is_none() && invoice_args.project_id.is_none() {
-        return Err(anyhow::anyhow!(
-            "Cannot make invoice without quote or project"
-        ));
-    }
-
-    if invoice_args.quote_id.is_some() {
-        let quote = sqlx::query_as!(
-            Quote,
-            r#"SELECT * FROM quotes WHERE id = ?"#,
-            invoice_args.quote_id
-        )
-        .fetch_one(db)
-        .await?;
-
-        sender_id = quote.sender_id;
-
-        if quote.vat_percentage.is_some() {
-            vat_percentage = quote.vat_percentage.unwrap();
-        }
-
-        if quote.discount.is_some() {
-            discount += quote.discount.unwrap_or(0);
-        }
-
-        if quote.project_id.is_some() {
-            project_id = quote.project_id;
-        }
-
-        currency = quote.currency;
-    }
-
-    if invoice_args.project_id.is_some() {
-        project_id = invoice_args.project_id;
-    }
-
-    let project = sqlx::query_as!(
-        Project,
-        r#"SELECT * FROM projects WHERE id = ?"#,
-        project_id
-    )
-    .fetch_one(db)
-    .await?;
-
-    let project_tasks = sqlx::query_as!(
-        ProjectTask,
-        r#"SELECT * FROM tasks WHERE project_id = ?"#,
-        project_id
-    )
-    .fetch_all(db)
-    .await?;
-
-    let total_before_vat = project_tasks.iter().fold(0, |acc, task| {
-        acc + task
-            .minutes_spent
-            .unwrap_or(task.minutes_estimated.unwrap_or(0))
-            * task.minute_rate.unwrap_or(0)
-    });
-    let total_after_vat = (total_before_vat - discount) * (100 + vat_percentage);
-
-    let invoice = InvoiceCreateArgs {
-        sender_id,
-        recipient_id: project.client_id,
-        invoice_number: format!("{}{:05}", chrono::Utc::now().year(), project.id),
-        send_date: Some(chrono::Utc::now().naive_local()),
-        quote_id: invoice_args.quote_id,
-        payment_due_date: Some(
-            chrono::Utc::now()
-                .checked_add_months(Months::new(1))
-                .unwrap()
-                .naive_local()),
-        payment_date: None,
-        contract_id: invoice_args.contract_id,
-        project_id,
-        remarks: invoice_args.remarks.clone(),
-        total_before_vat: Some(total_before_vat),
-        discount: Some(discount),
-        currency: Some(currency),
-        vat_percentage: Some(vat_percentage),
-        total_after_vat: Some(total_after_vat),
-        invoice_url: None,
-        payment_request_url: None,
-    };
-
-    let sender_account = sqlx::query_as!(
-        Account,
-        r#"SELECT * FROM accounts WHERE id = ?"#,
-        invoice.sender_id
-    )
-    .fetch_one(db)
-    .await?;
-
-    let sender = sqlx::query_as!(
-        Company,
-        r#"SELECT * FROM companies WHERE id = ?"#,
-        sender_account.company_id
-    )
-    .fetch_one(db)
-    .await?;
-
-    let sender_address = sqlx::query_as!(
-        Address,
-        r#"SELECT * FROM address WHERE id = ?"#,
-        sender.address_id
-    )
-    .fetch_one(db)
-    .await?;
-
-    let recipient = sqlx::query_as!(
-        Account,
-        r#"SELECT * FROM accounts WHERE id = ?"#,
-        project.client_id
-    )
-    .fetch_one(db)
-    .await?;
-
-    let mut recipient_address: Option<Address> = None;
-    let mut recipient_company_name: Option<String> = None;
-
-    if recipient.company_id.is_some() {
-        let recipient_company = sqlx::query_as!(
-            Company,
-            r#"SELECT * FROM companies WHERE id = ?"#,
-            recipient.company_id
-        )
-        .fetch_one(db)
-        .await?;
-
-        recipient_company_name = Some(recipient_company.name.clone());
-
-        let result = sqlx::query_as!(
-            Address,
-            r#"SELECT * FROM address WHERE id = ?"#,
-            recipient_company.address_id
-        )
-        .fetch_one(db)
-        .await;
-
-        recipient_address = match result {
-            Ok(address) => Some(address),
-            Err(_) => None,
-        };
-    }
-
-    if recipient.address_id.is_some() && recipient_address.is_none() {
-        let result = sqlx::query_as!(
-            Address,
-            r#"SELECT * FROM address WHERE id = ?"#,
-            recipient.address_id
-        )
-        .fetch_one(db)
-        .await;
-
-        recipient_address = match result {
-            Ok(address) => Some(address),
-            Err(_) => None,
-        };
-    }
-
-    let (recipient_street, recipient_postal_city) = match recipient_address {
-        Some(address) => (
-            format!(
-                "{} {} {}",
-                address.street.clone().unwrap_or("".to_string()),
-                address.number.clone().unwrap_or("".to_string()),
-                address.unit.clone().unwrap_or("".to_string()),
-            ),
-            format!(
-                "{} {}",
-                address.postalcode.clone().unwrap_or("".to_string()),
-                address.city.clone().unwrap_or("".to_string()),
-            ),
-        ),
-        None => ("".to_string(), "".to_string()),
-    };
-
-    let vat_amount = invoice.total_after_vat.unwrap_or(0)
-        - ((invoice.total_before_vat.unwrap_or(0) - invoice.discount.unwrap_or(0)) * 100);
 
     let invoice_url = if invoice_args.contract_id.is_some() {
         let mut invoice_table = Vec::new();
+        let contract_id = invoice_args.contract_id.unwrap();
 
         let contract = sqlx::query_as!(
             Contract,
             r#"SELECT * FROM contracts WHERE id = ?"#,
-            invoice_args.contract_id
+            contract_id
         )
         .fetch_one(db)
         .await?;
+
+        #[derive(sqlx::FromRow, Debug)]
+        struct InvoiceRecord {
+            invoice_number: String,
+        }
+
+        let last_invoice = sqlx::query_as!(InvoiceRecord,
+            r#"SELECT invoice_number FROM invoices ORDER BY id DESC LIMIT 1"#,
+        ).fetch_one(db).await.unwrap_or(InvoiceRecord { invoice_number: format!("{}{:05}", chrono::Utc::now().year(), 0) });
+        
+
+        let last_invoice_year = last_invoice.invoice_number.chars().take(4).collect::<String>();
+        let new_invoice_number = if last_invoice_year == chrono::Utc::now().year().to_string() {
+             (last_invoice.invoice_number.parse::<usize>().unwrap_or(0) + 1).to_string()
+        } else {
+            format!("{}{:05}", chrono::Utc::now().year(), 1)
+        };
+        
+
 
         let last_contract_invoice = sqlx::query_as!(
             Invoice,
@@ -1461,16 +1308,24 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
             invoice_args.contract_id
         )
         .fetch_one(db)
-        .await?;
+        .await;
 
-        let last_invoiced_date = last_contract_invoice.payment_date.unwrap_or(
-            last_contract_invoice
-                .send_date
-                .unwrap_or(contract.start_date.unwrap()),
-        );
-
-        let duration = chrono::Utc::now().signed_duration_since(last_invoiced_date.and_utc());
+        let (last_invoiced_date, duration) = match last_contract_invoice {
+            Ok(inv) => {
+                let last_invoiced_date = inv.payment_date.unwrap_or(
+                    inv
+                        .send_date
+                        .unwrap_or(contract.start_date.unwrap()),
+                );
+                (last_invoiced_date, chrono::Utc::now().signed_duration_since(last_invoiced_date.and_utc()))
+            }
+            Err(_) => {
+                let last_invoiced_date = contract.start_date.unwrap();
+                (last_invoiced_date, chrono::Utc::now().signed_duration_since(last_invoiced_date.and_utc()))
+            }
+        };
         let total_months = duration.num_weeks() * 52 / 12;
+        let mut total_before_vat = 0;
 
         for i in (0..=total_months).step_by(contract.invoice_period_months.unwrap_or(1) as usize) {
             let total =
@@ -1496,6 +1351,8 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
                 format!("{} - {}", first_month.format("%B"), last_month.format("%B"))
             };
 
+            total_before_vat += total;
+
             invoice_table.push(self::invoice_maintenance::InvoiceMaintenanceTableData {
                 description,
                 months: contract.invoice_period_months.unwrap_or(1),
@@ -1503,6 +1360,130 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
                 total: format!("{:.2}", total as f64 / 100.0),
             });
         }
+
+        
+
+        let total_after_vat = (total_before_vat - discount) * (100 + vat_percentage);
+    
+        invoice = InvoiceCreateArgs {
+            sender_id: contract.sender_id,
+            recipient_id: contract.recipient_id,
+            invoice_number: new_invoice_number,
+            send_date: Some(chrono::Utc::now().naive_local()),
+            quote_id: None,
+            payment_due_date: Some(
+                chrono::Utc::now()
+                    .checked_add_months(Months::new(1))
+                    .unwrap()
+                    .naive_local()),
+            payment_date: None,
+            contract_id: invoice_args.contract_id,
+            project_id: None,
+            remarks: invoice_args.remarks.clone(),
+            total_before_vat: Some(total_before_vat),
+            discount: Some(discount),
+            currency: Some(currency),
+            vat_percentage: Some(vat_percentage),
+            total_after_vat: Some(total_after_vat),
+            invoice_url: None,
+            payment_request_url: None,
+        };
+
+        let sender_account = sqlx::query_as!(
+            Account,
+            r#"SELECT * FROM accounts WHERE id = ?"#,
+            invoice.sender_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let sender = sqlx::query_as!(
+            Company,
+            r#"SELECT * FROM companies WHERE id = ?"#,
+            sender_account.company_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let sender_address = sqlx::query_as!(
+            Address,
+            r#"SELECT * FROM address WHERE id = ?"#,
+            sender.address_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let recipient = sqlx::query_as!(
+            Account,
+            r#"SELECT * FROM accounts WHERE id = ?"#,
+            contract.recipient_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let mut recipient_address: Option<Address> = None;
+        let mut recipient_company_name: Option<String> = None;
+    
+        if recipient.company_id.is_some() {
+            let recipient_company = sqlx::query_as!(
+                Company,
+                r#"SELECT * FROM companies WHERE id = ?"#,
+                recipient.company_id
+            )
+            .fetch_one(db)
+            .await?;
+    
+            recipient_company_name = Some(recipient_company.name.clone());
+    
+            let result = sqlx::query_as!(
+                Address,
+                r#"SELECT * FROM address WHERE id = ?"#,
+                recipient_company.address_id
+            )
+            .fetch_one(db)
+            .await;
+    
+            recipient_address = match result {
+                Ok(address) => Some(address),
+                Err(_) => None,
+            };
+        }
+    
+        if recipient.address_id.is_some() && recipient_address.is_none() {
+            let result = sqlx::query_as!(
+                Address,
+                r#"SELECT * FROM address WHERE id = ?"#,
+                recipient.address_id
+            )
+            .fetch_one(db)
+            .await;
+    
+            recipient_address = match result {
+                Ok(address) => Some(address),
+                Err(_) => None,
+            };
+        }
+    
+        let (recipient_street, recipient_postal_city) = match recipient_address {
+            Some(address) => (
+                format!(
+                    "{} {} {}",
+                    address.street.clone().unwrap_or("".to_string()),
+                    address.number.clone().unwrap_or("".to_string()),
+                    address.unit.clone().unwrap_or("".to_string()),
+                ),
+                format!(
+                    "{} {}",
+                    address.postalcode.clone().unwrap_or("".to_string()),
+                    address.city.clone().unwrap_or("".to_string()),
+                ),
+            ),
+            None => ("".to_string(), "".to_string()),
+        };
+        
+        let vat_amount = invoice.total_after_vat.unwrap_or(0)
+            - ((invoice.total_before_vat.unwrap_or(0) - invoice.discount.unwrap_or(0)) * 100);
+    
 
         let invoice_template = self::invoice_maintenance::InvoiceMaintenanceTemplate {
             sender_name: sender_account.name.clone().unwrap_or("".to_string()),
@@ -1566,6 +1547,181 @@ pub async fn make_invoice(db: &SqlitePool, invoice_args: &InvoiceMakeArgs) -> Re
         generate_pdf(&pdf_args).await?
     } else {
         let mut invoice_table = Vec::new();
+        let mut project_id: Option<i64> = None;
+
+        if invoice_args.quote_id.is_some() {
+            let quote = sqlx::query_as!(
+                Quote,
+                r#"SELECT * FROM quotes WHERE id = ?"#,
+                invoice_args.quote_id
+            )
+            .fetch_one(db)
+            .await?;
+    
+            sender_id = quote.sender_id;
+    
+            if quote.vat_percentage.is_some() {
+                vat_percentage = quote.vat_percentage.unwrap();
+            }
+    
+            if quote.discount.is_some() {
+                discount += quote.discount.unwrap_or(0);
+            }
+    
+            if quote.project_id.is_some() {
+                project_id = quote.project_id;
+            }
+    
+            currency = quote.currency;
+        }
+    
+        if invoice_args.project_id.is_some() {
+            project_id = invoice_args.project_id;
+        }
+    
+        let project = sqlx::query_as!(
+            Project,
+            r#"SELECT * FROM projects WHERE id = ?"#,
+            project_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let project_tasks = sqlx::query_as!(
+            ProjectTask,
+            r#"SELECT * FROM tasks WHERE project_id = ?"#,
+            project_id
+        )
+        .fetch_all(db)
+        .await?;
+    
+        let total_before_vat = project_tasks.iter().fold(0, |acc, task| {
+            acc + task
+                .minutes_spent
+                .unwrap_or(task.minutes_estimated.unwrap_or(0))
+                * task.minute_rate.unwrap_or(0)
+        });
+        let total_after_vat = (total_before_vat - discount) * (100 + vat_percentage);
+    
+        invoice = InvoiceCreateArgs {
+            sender_id,
+            recipient_id: project.client_id,
+            invoice_number: format!("{}{:05}", chrono::Utc::now().year(), project.id),
+            send_date: Some(chrono::Utc::now().naive_local()),
+            quote_id: invoice_args.quote_id,
+            payment_due_date: Some(
+                chrono::Utc::now()
+                    .checked_add_months(Months::new(1))
+                    .unwrap()
+                    .naive_local()),
+            payment_date: None,
+            contract_id: invoice_args.contract_id,
+            project_id,
+            remarks: invoice_args.remarks.clone(),
+            total_before_vat: Some(total_before_vat),
+            discount: Some(discount),
+            currency: Some(currency),
+            vat_percentage: Some(vat_percentage),
+            total_after_vat: Some(total_after_vat),
+            invoice_url: None,
+            payment_request_url: None,
+        };
+    
+        let sender_account = sqlx::query_as!(
+            Account,
+            r#"SELECT * FROM accounts WHERE id = ?"#,
+            invoice.sender_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let sender = sqlx::query_as!(
+            Company,
+            r#"SELECT * FROM companies WHERE id = ?"#,
+            sender_account.company_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let sender_address = sqlx::query_as!(
+            Address,
+            r#"SELECT * FROM address WHERE id = ?"#,
+            sender.address_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let recipient = sqlx::query_as!(
+            Account,
+            r#"SELECT * FROM accounts WHERE id = ?"#,
+            project.client_id
+        )
+        .fetch_one(db)
+        .await?;
+    
+        let mut recipient_address: Option<Address> = None;
+        let mut recipient_company_name: Option<String> = None;
+    
+        if recipient.company_id.is_some() {
+            let recipient_company = sqlx::query_as!(
+                Company,
+                r#"SELECT * FROM companies WHERE id = ?"#,
+                recipient.company_id
+            )
+            .fetch_one(db)
+            .await?;
+    
+            recipient_company_name = Some(recipient_company.name.clone());
+    
+            let result = sqlx::query_as!(
+                Address,
+                r#"SELECT * FROM address WHERE id = ?"#,
+                recipient_company.address_id
+            )
+            .fetch_one(db)
+            .await;
+    
+            recipient_address = match result {
+                Ok(address) => Some(address),
+                Err(_) => None,
+            };
+        }
+    
+        if recipient.address_id.is_some() && recipient_address.is_none() {
+            let result = sqlx::query_as!(
+                Address,
+                r#"SELECT * FROM address WHERE id = ?"#,
+                recipient.address_id
+            )
+            .fetch_one(db)
+            .await;
+    
+            recipient_address = match result {
+                Ok(address) => Some(address),
+                Err(_) => None,
+            };
+        }
+    
+        let (recipient_street, recipient_postal_city) = match recipient_address {
+            Some(address) => (
+                format!(
+                    "{} {} {}",
+                    address.street.clone().unwrap_or("".to_string()),
+                    address.number.clone().unwrap_or("".to_string()),
+                    address.unit.clone().unwrap_or("".to_string()),
+                ),
+                format!(
+                    "{} {}",
+                    address.postalcode.clone().unwrap_or("".to_string()),
+                    address.city.clone().unwrap_or("".to_string()),
+                ),
+            ),
+            None => ("".to_string(), "".to_string()),
+        };
+    
+        let vat_amount = invoice.total_after_vat.unwrap_or(0)
+            - ((invoice.total_before_vat.unwrap_or(0) - invoice.discount.unwrap_or(0)) * 100);
+    
 
         for project_task in project_tasks {
             invoice_table.push(self::invoice::InvoiceTableData {

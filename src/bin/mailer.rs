@@ -1,26 +1,39 @@
-extern crate email_format;
-extern crate mailstrom;
+extern crate anyhow;
+extern crate chrono;
+extern crate dotenv;
+extern crate lettre;
 extern crate serde;
 extern crate serde_json;
 extern crate sqlx;
+extern crate tokio;
 
-use casual_cli_lib::email::*;
+use address::Envelope;
+use casual_cli_lib::clapargs::InvoiceMakeArgs;
 use casual_cli_lib::models::{Account, Contract, Schedule};
+use casual_cli_lib::queries::make_invoice;
 use chrono::{Datelike, NaiveDateTime, Timelike};
-use lettre::Transport;
+use lettre::*;
+use transport::smtp;
+use transport::smtp::response::Response;
 
-use std::io::Read;
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, fs};
 
 use anyhow::{anyhow, Ok, Result};
-use mailstrom::config::Config;
-use mailstrom::Mailstrom;
 use sqlx::SqlitePool;
 
 const SLEEP_TIME_MINUTES: u64 = 5;
 const SLEEP_TIME_SECONDS: u64 = 60 * SLEEP_TIME_MINUTES;
+
+type Message = lettre::Message;
+
+struct RawMessage {
+    envelope: Envelope,
+    message: Vec<u8>,
+    path: Option<PathBuf>,
+}
 
 fn add_months(date: NaiveDateTime, months: u32) -> Result<NaiveDateTime> {
     let year = date.year();
@@ -104,39 +117,56 @@ async fn auto_schedule_contracts(db_pool: &SqlitePool) -> Result<()> {
             let recipient_name = recipient.name.unwrap_or("Client".to_string());
             let end_date_string = end_date.format("%Y-%m-%d").to_string();
 
-            if end_date < chrono::Local::now().naive_local() + chrono::Duration::days(2) {
-                let mut email = email_format::Email::new(
-                    sender_email.as_str(),
-                    chrono::Local::now()
-                        .format("%a, %d %b %Y %H:%M:%S %z")
-                        .to_string()
-                        .as_str(),
-                )
-                .unwrap();
+            if end_date < chrono::Local::now().naive_local() + chrono::Duration::days(31) {
+                let invoice_make_args = InvoiceMakeArgs {
+                    contract_id: Some(contract.id),
+                    quote_id: None,
+                    project_id: None,
+                    remarks: None,
+                    discount: None,
+                };
 
-                email.set_sender(sender_email.as_str()).unwrap();
-                email
-                    .set_reply_to("CD Mailer <no-reply@casualdevelopment.nl>")
-                    .unwrap();
-                email
-                    .set_to(format!("{} <{}>", recipient_name, recipient_email).as_str())
-                    .unwrap();
-                email.set_subject("Contract Renewal").unwrap();
-                email.set_body(format!("Hello {},\r\n\
-                \r\n\
-                This is a friendly reminder that your contract with {} is set to expire on {}.\r\n\
-                \r\n\
-                If you would like to renew your contract, please contact us at your earliest convenience.\r\n\
-                \r\n\
-                Best regards,\r\n\
-                Casual Development", recipient_name, sender_name, end_date_string).as_str()).unwrap();
-                
-                email
-                    .write_to_file(
-                        format!("contract-renewal-{}.eml", recipient_name).as_str(),
-                        Some(end_date_string.as_str()),
+                let filename = make_invoice(&db_pool, &invoice_make_args).await?;
+                let filebody = fs::read(&filename)?;
+                let content_type = message::header::ContentType::parse("application/pdf").unwrap();
+                let attachment = message::Attachment::new(filename).body(filebody, content_type);
+
+                let email = Message::builder()
+                    .from(sender_email.as_str().parse()?)
+                    .date(
+                    chrono::Local::now()
+                        .into()
                     )
-                    .unwrap();
+                    .reply_to("CD Mailer <no-reply@casualdevelopment.nl>".parse()?)
+                    .to(format!("{} <{}>", recipient_name, recipient_email).parse()?)
+                    .subject("Contract Renewal")
+                    .multipart(
+                        message::MultiPart::mixed().singlepart(
+                            message::SinglePart::plain(format!("Hello {},\r\n\
+                            \r\n\
+                            This is a friendly reminder that your contract with {} is set to expire on {}.\r\n\
+                            \r\n\
+                            If you would like to renew your contract, please contact us at your earliest convenience.\r\n\
+                            \r\n\
+                            Best regards,\r\n\
+                            Casual Development", recipient_name, sender_name, end_date_string)).into()
+                        ).singlepart(attachment)
+                    ).unwrap();
+                let path = format!(
+                    "./mails/schedule/{}",
+                    chrono::Local::now()
+                        .naive_local()
+                        .format("%Y-%m-%d")
+                        .to_string()
+                );
+                let path_dir = std::path::Path::new(path.as_str());
+                if !path_dir.exists() || !path_dir.is_dir() {
+                    fs::create_dir_all(path_dir)?;
+                }
+                let file_transport =
+                    lettre::transport::file::FileTransport::with_envelope(path_dir);
+                file_transport.send(&email).unwrap();
+
                 let new_end_date = add_months(end_date, invoice_peroid_months.try_into().unwrap())?;
                 sqlx::query!(
                     "UPDATE contracts SET end_date = ? WHERE id = ?",
@@ -160,44 +190,108 @@ async fn auto_schedule_schedule(db_pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn process_scheduled_emails() -> Result<Vec<email_format::Email>> {
+fn process_scheduled_emails(date: &str) -> Result<Vec<RawMessage>> {
     let mut emails = vec![];
-    let path_name = format!(
-        "./mails/schedule/{}",
-        chrono::Local::now()
-            .naive_local()
-            .format("%Y-%m-%d")
-            .to_string()
-    );
-    let path = std::path::Path::new(path_name.as_str());
-    if !path.exists() || !path.is_dir() {
-        println!("No emails to send today.");
-        return Ok(emails);
-    }
-    fs::read_dir(path)?
+    println!("Processing scheduled emails for date: {}", date);
+    let all_scheduled_dates = fs::read_dir("./mails/schedule")?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
-            if path.is_file() {
-                Some(path)
+            println!("Checking path: {:?}", path);
+            if path.is_dir() {
+                let schedule_date = path.file_name().unwrap().to_str().unwrap().to_string();
+                let datetime =
+                    NaiveDateTime::parse_from_str(format!("{} 00:00:00", schedule_date).as_str(), "%Y-%m-%d %H:%M:%S");
+                let datetime_now = NaiveDateTime::parse_from_str(format!("{} 00:00:00", date).as_str(), "%Y-%m-%d %H:%M:%S");
+                println!("Checking datetime {}: {:?} <= {:?}", schedule_date, datetime, datetime_now);
+                if datetime.is_ok()
+                    && datetime_now.is_ok()
+                    && datetime.unwrap() <= datetime_now.unwrap()
+                {
+                    Some(schedule_date)
+                } else {
+                    None
+                }
             } else {
                 None
             }
         })
-        .for_each(|path| {
-            println!("Processing email: {:?}", path);
-            let email = email_format::Email::from_file(path.to_str().unwrap()).unwrap();
-            emails.push(email);
-            fs::remove_file(path).unwrap();
-        });
+        .collect::<Vec<String>>();
+    println!("Scheduled dates: {:?}", all_scheduled_dates);
+    for scheduled_date in all_scheduled_dates {
+        let schedule_path_name = format!("./mails/schedule/{}", scheduled_date);
+        let schedule_dir = std::path::Path::new(schedule_path_name.as_str());
+        if !schedule_dir.exists() || !schedule_dir.is_dir() {
+            println!("No emails to send today ({}).", scheduled_date);
+            continue;
+        }
+        let queue_path_name = format!("./mails/queue/{}", date);
+        let queue_dir = std::path::Path::new(queue_path_name.as_str());
+        if !queue_dir.exists() || !queue_dir.is_dir() {
+            fs::create_dir_all(queue_dir)?;
+        }
 
+        fs::read_dir(schedule_dir)?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_file() && path.extension().unwrap() == "eml" {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .for_each(|path| {
+                let mut path = path;
+                println!("Processing email: {:?}", path);
+                // let email = email_format::Email::from_file(path.to_str().unwrap()).unwrap();
+                // emails.push(email);
+                let transport = lettre::transport::file::FileTransport::with_envelope(schedule_dir);
+                let (envelope, raw_msg) = transport
+                    .read(path.file_stem().unwrap().to_str().unwrap())
+                    .unwrap();
+
+                let queue_file_name = format!(
+                    "{}/{}",
+                    queue_path_name,
+                    &path.file_name().unwrap().to_str().unwrap()
+                );
+                let queue_file_path = PathBuf::from(queue_file_name);
+                fs::rename(&path, &queue_file_path).unwrap();
+
+                if path.set_extension("json") {
+                    fs::rename(
+                        &path,
+                        format!(
+                            "{}/{}",
+                            queue_path_name,
+                            &path.file_name().unwrap().to_str().unwrap()
+                        ),
+                    )
+                    .unwrap();
+                }
+
+                let raw_message = RawMessage {
+                    envelope,
+                    message: raw_msg,
+                    path: Some(queue_file_path),
+                };
+
+                emails.push(raw_message);
+            });
+        if schedule_dir.read_dir()?.count() == 0 {
+            fs::remove_dir(schedule_dir)?;
+        }
+    }
     Ok(emails)
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+    dotenv::dotenv().ok();
+    let should_quit_daemon = false;
     while !should_quit_daemon {
-        dotenv::dotenv().ok();
+        let date_string = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         let db_pool = SqlitePool::connect(&env::var("DATABASE_URL")?).await?;
         sqlx::migrate!().run(&db_pool).await?;
@@ -205,89 +299,120 @@ async fn main() -> Result<()> {
         auto_schedule_contracts(&db_pool).await?;
         auto_schedule_schedule(&db_pool).await?;
 
-        let emails: Vec<Email> = process_scheduled_emails().await?;
+        let emails = process_scheduled_emails(&date_string)?;
 
-        let mut mailstrom = Mailstrom::new(
-            Config {
-                helo_name: "casualdevelopment.nl".to_owned(),
-                ..Default::default()
-            },
-            FileStorage::new(),
-        );
-
-        // We must explicitly tell mailstrom to start actually sending emails.  If we
-        // were only interested in reading the status of previously sent emails, we
-        // would not send this command.
-        mailstrom.start().unwrap();
-
-        let mut message_ids = Vec::<String>::with_capacity(emails.len());
-        for email in emails {
-            message_ids.push(mailstrom.send_email(email).unwrap());
+        let smtp_transport = if env::var("SMTP_SERVER").is_ok()
+            && env::var("SMTP_USERNAME").is_ok()
+            && env::var("SMTP_PASSWORD").is_ok()
+        {
+            println!("Using SMTP server: {}", env::var("SMTP_SERVER")?);
+            lettre::transport::smtp::SmtpTransport::relay(&env::var("SMTP_SERVER")?)
+                .unwrap()
+                .credentials(lettre::transport::smtp::authentication::Credentials::new(
+                    env::var("SMTP_USERNAME")?,
+                    env::var("SMTP_PASSWORD")?,
+                ))
+                .build()
+        } else {
+            println!("Using unencrypted localhost SMTP server");
+            transport::smtp::SmtpTransport::unencrypted_localhost()
+        };
+        let mut message_results =
+            Vec::<(Result<Response, smtp::Error>, Option<PathBuf>)>::with_capacity(emails.len());
+        for email in &emails {
+            message_results.push((
+                smtp_transport.send_raw(&email.envelope, &email.message.as_slice()),
+                email.path.clone(),
+            ));
+            // message_ids.push(mailstrom.send_email(email).unwrap());
         }
 
-        let mut should_quit = false;
-        let mut success = false;
-        let mut amount_delivered = 0;
+        // let mut should_quit = false;
+        let mut success = true;
+        // let mut amount_delivered = 0;
         let mut amount_failed = 0;
-        let mut amount_deferred = 0;
+        // let mut amount_deferred = 0;
         let mut amount_sent = 0;
 
-        // Later on, after the worker thread has had time to process the request,
-        // you can check the status:
-        while !should_quit {
-            amount_delivered = 0;
-            amount_failed = 0;
-            amount_deferred = 0;
-            amount_sent = 0;
-            let mut completed: Vec<bool> = vec![];
-            let mut succeeded: Vec<bool> = vec![];
-            for message_id in &message_ids {
-                let status = mailstrom.query_status(&*message_id)?;
-                amount_sent += status.recipient_status.len();
-                println!("{:?} {:?}", mailstrom.worker_status(), status);
+        let sent_path_name = format!("./mails/sent/{}", date_string);
+        let sent_dir = std::path::Path::new(sent_path_name.as_str());
+        if !sent_dir.exists() || !sent_dir.is_dir() {
+            fs::create_dir_all(sent_dir)?;
+        }
+        let fail_path_name = format!("./mails/failed/{}", date_string);
+        let fail_dir = std::path::Path::new(fail_path_name.as_str());
+        if !fail_dir.exists() || !fail_dir.is_dir() {
+            fs::create_dir_all(fail_dir)?;
+        }
 
-                if status.completed() {
-                    completed.push(true);
-                    if status.succeeded() {
-                        succeeded.push(true);
-                    } else {
-                        succeeded.push(false);
+        for message_result in message_results {
+            match message_result {
+                (std::result::Result::Ok(_), path) => {
+                    amount_sent += 1;
+                    if let Some(mut p) = path {
+                        let sent_file_name = format!(
+                            "{}/{}",
+                            sent_path_name,
+                            &p.file_name().unwrap().to_str().unwrap()
+                        );
+                        let sent_file_path = PathBuf::from(sent_file_name);
+                        fs::rename(&p, &sent_file_path).unwrap();
+
+                        if p.set_extension("json") {
+                            fs::rename(
+                                &p,
+                                format!(
+                                    "{}/{}",
+                                    sent_path_name,
+                                    &p.file_name().unwrap().to_str().unwrap()
+                                ),
+                            )
+                            .unwrap();
+                        }
                     }
                 }
+                (Err(e), path) => {
+                    println!("Error sending email: {:?}", e);
+                    amount_failed += 1;
+                    success = false;
+                    if let Some(mut p) = path {
+                        let fail_file_name = format!(
+                            "{}/{}",
+                            fail_path_name,
+                            &p.file_name().unwrap().to_str().unwrap()
+                        );
+                        let fail_file_path = PathBuf::from(fail_file_name);
+                        fs::rename(&p, &fail_file_path).unwrap();
 
-                status.recipient_status.iter().for_each(|r| match r.result {
-                    mailstrom::DeliveryResult::Delivered(_) => amount_delivered += 1,
-                    mailstrom::DeliveryResult::Failed(_) => amount_failed += 1,
-                    mailstrom::DeliveryResult::Deferred(_, _) => amount_deferred += 1,
-                    _ => {}
-                });
-            }
-
-            if completed.len() == message_ids.len() {
-                if succeeded.iter().all(|&x| x) {
-                    success = true;
+                        if p.set_extension("json") {
+                            fs::rename(
+                                &p,
+                                format!(
+                                    "{}/{}",
+                                    fail_path_name,
+                                    &p.file_name().unwrap().to_str().unwrap()
+                                ),
+                            )
+                            .unwrap();
+                        }
+                    }
                 }
-                should_quit = true;
-            }
-
-            if amount_sent <= amount_delivered + amount_failed + amount_deferred {
-                should_quit = true;
-            }
-
-            if !should_quit {
-                sleep(Duration::from_secs(5));
             }
         }
 
         if success {
             println!(
-                "Emails ({}) sent successfully! {} delivered, {} failed, {} deferred",
-                amount_sent, amount_delivered, amount_failed, amount_deferred
+                "Emails ({}) sent successfully! {} sent {} failed.",
+                &emails.len(),
+                amount_sent,
+                amount_failed
             );
         } else {
             println!(
-                "Failed sending some or all emails ({}). {} delivered, {} failed, {} deferred.",
-                amount_sent, amount_delivered, amount_failed, amount_deferred
+                "Failed sending some or all emails ({}). {} sent {} failed.",
+                &emails.len(),
+                amount_sent,
+                amount_failed
             );
         }
         println!("Sleeping for {} minutes...", SLEEP_TIME_MINUTES);
