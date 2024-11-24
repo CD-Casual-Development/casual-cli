@@ -1,7 +1,8 @@
 import { $ } from 'bun';
 import fs from 'node:fs';
+import type { JsxElement } from 'typescript';
 
-export async function waitTillFileCreatedAndRedirect(predictedNames: string | string[], path: string = process.env.CCLI_OUTPUT_DIR || '../public/pdfs', timeoutInSeconds: number = 10): Promise<Response | undefined> {
+export async function waitTillFileCreatedAndRedirect(predictedNames: string | string[], path: string = process.env.CCLI_OUTPUT_DIR || '../public/pdfs', maxRetries: number = 10): Promise<Response | undefined> {
   let res: Response | undefined;
 
   if (typeof predictedNames === 'string') {
@@ -20,7 +21,7 @@ export async function waitTillFileCreatedAndRedirect(predictedNames: string | st
   });
 
   let retries = 0;
-  while (!res && retries < timeoutInSeconds) {
+  while (!res && retries < maxRetries) {
     await new Promise(r => setTimeout(r, 1000));
     retries++;
   }
